@@ -1,0 +1,19 @@
+{
+ "ckpt": "out/scale-select/castle_brick_07/m/shade4/nvfp4_scale_mode-max/model.pt",
+ "bytes": {
+  "latents": 2949128,
+  "weights_fp16": 16960
+ },
+ "max_abs_err_vs_fp16_ref": 0.0013042688369750977,
+ "mean_abs_err_vs_fp32_ref": 0.00010133066825801507,
+ "stf_vs_bilinear_psnr_db_by_frames": {
+  "1": 18.09,
+  "4": 19.86,
+  "16": 20.46,
+  "64": 20.62
+ },
+ "cuda_ms_1080p": 1.1569638061523437,
+ "cuda_us_per_mpix": 557.9493663929127,
+ "pytorch_fp16_ms_1080p": 42.11970520019531,
+ "tensor_tflops_effective": 29.3646717549317
+}

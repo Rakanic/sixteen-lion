@@ -19,7 +19,8 @@ import torch
 
 from .data import GROUPS, load_material
 from .model import NeuralTexture
-from .shading import EVAL_SETUPS, ggx_radiance, random_hemisphere, shade_image, tonemap
+from .quant import SCALE_CHOICES, choose_scales
+from .shading import EVAL_SETUPS, UNSEEN_SETUPS, ggx_radiance, random_hemisphere, shade_image, shade_image_unseen, tonemap
 
 DEFAULTS = dict(
     steps=20000,
@@ -29,9 +30,13 @@ DEFAULTS = dict(
     lr_mlp=2e-3,
     hidden=64,
     layers=2,
+    filter="bilinear",  # latent sampling: bilinear or concat4 (see sixteen.model)
     w_texel=1.0,
     w_shading=0.0,
     seed=0,
+    scale_mode="max",  # block scales: max (spec rule), mse, or weighted (loss sensitivity)
+    refresh_every=250,  # steps between scale re-selections during QAT
+    save_ckpt=True,
     res="2k",
     crop=(768, 768, 256),  # y, x, size of the saved image crops
 )
@@ -49,7 +54,7 @@ def train(material, fmt, grids, out_dir=None, device="cuda", **kw):
     H, W, C = ref.shape
     flat = ref.view(-1, C)
 
-    model = NeuralTexture((H, W), C, grids=grids, hidden=cfg["hidden"], layers=cfg["layers"]).to(device)
+    model = NeuralTexture((H, W), C, grids=grids, hidden=cfg["hidden"], layers=cfg["layers"], filter=cfg["filter"]).to(device)
     opt = torch.optim.Adam(
         [
             {"params": model.latents.parameters(), "lr": cfg["lr_latent"]},
@@ -59,10 +64,29 @@ def train(material, fmt, grids, out_dir=None, device="cuda", **kw):
     base_lrs = [g["lr"] for g in opt.param_groups]
     steps, qat_step = cfg["steps"], int(cfg["qat_start"] * cfg["steps"])
 
+    if cfg["scale_mode"] != "max" and fmt not in SCALE_CHOICES:
+        raise ValueError(f"scale selection needs a block-scaled format, got {fmt}")
+    sens = [torch.zeros_like(g) for g in model.latents]  # accumulated grad^2 per latent value
+
+    def refresh_scales(reset=True):
+        for i, g in enumerate(model.latents):
+            w = None if cfg["scale_mode"] == "mse" else sens[i] / sens[i].mean().clamp(min=1e-30)
+            model.scale_choice[i] = choose_scales(g.detach(), fmt, w)
+            if reset:
+                sens[i].zero_()
+
     t0 = time.time()
     for step in range(steps):
         if step == qat_step:
             model.fmt = fmt
+            if cfg["scale_mode"] != "weighted":
+                for acc in sens:
+                    acc.zero_()  # saved sensitivity = QAT phase only
+            if out_dir is not None and cfg["save_ckpt"]:
+                pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
+                torch.save(model.state_dict(), pathlib.Path(out_dir) / "model_float.pt")
+        if cfg["scale_mode"] != "max" and step >= qat_step and (step - qat_step) % cfg["refresh_every"] == 0:
+            refresh_scales()
         # cosine decay within each phase, so QAT starts from a fresh learning rate
         s0, s1 = (0, qat_step) if step < qat_step else (qat_step, steps)
         f = 0.5 * (1 + math.cos(math.pi * (step - s0) / max(1, s1 - s0)))
@@ -82,8 +106,17 @@ def train(material, fmt, grids, out_dir=None, device="cuda", **kw):
             ).pow(2).mean()
         opt.zero_grad(set_to_none=True)
         loss.backward()
+        with torch.no_grad():
+            for acc, g in zip(sens, model.latents):
+                acc += g.grad.detach() ** 2
         opt.step()
+    if cfg["scale_mode"] != "max":
+        refresh_scales(reset=False)  # final choice for the trained latents (weights from the last window)
     train_s = time.time() - t0
+    if out_dir is not None and cfg["save_ckpt"]:
+        torch.save({"state": model.state_dict(), "fmt": fmt, "scale_choice": model.scale_choice,
+                    "sensitivity": sens, "grids": [list(g) for g in grids], "cfg": cfg},
+                   pathlib.Path(out_dir) / "model.pt")
 
     metrics = evaluate(model, ref, fmt, cfg, out_dir)
     bits = model.storage_bits(fmt)
@@ -92,6 +125,7 @@ def train(material, fmt, grids, out_dir=None, device="cuda", **kw):
         fmt=fmt,
         grids=[list(g) for g in grids],
         loss="texel" if cfg["w_shading"] == 0 else f"texel+{cfg['w_shading']:g}*shading",
+        scale_mode=cfg["scale_mode"],
         bpp_latent=bits["latent_bits"] / (H * W),
         bpp_total=(bits["latent_bits"] + bits["mlp_bits"]) / (H * W),
         train_s=train_s,
@@ -122,6 +156,14 @@ def evaluate(model, ref, fmt, cfg, out_dir=None):
         m[f"flip_{s}"] = float(mean_flip)
     m["psnr_shaded"] = float(np.mean([m[f"psnr_shaded_{s}"] for s in EVAL_SETUPS]))
     m["flip"] = float(np.mean([m[f"flip_{s}"] for s in EVAL_SETUPS]))
+    for s in UNSEEN_SETUPS:
+        a, b = shade_image_unseen(ref, s), shade_image_unseen(dec, s)
+        shaded[f"unseen_{s}"] = (a, b)
+        m[f"psnr_unseen_{s}"] = psnr(a, b)
+        _, mean_flip, _ = flip.evaluate(a.cpu().numpy(), b.cpu().numpy(), "LDR")
+        m[f"flip_unseen_{s}"] = float(mean_flip)
+    m["psnr_unseen"] = float(np.mean([m[f"psnr_unseen_{s}"] for s in UNSEEN_SETUPS]))
+    m["flip_unseen"] = float(np.mean([m[f"flip_unseen_{s}"] for s in UNSEEN_SETUPS]))
 
     if out_dir is not None:
         out = pathlib.Path(out_dir)

@@ -1,0 +1,22 @@
+# Base models for the rendering-aware rounding experiment
+# (tools/shading_rounding.py runs on each checkpoint). Two seeds, 6
+# materials, both 4-bit formats, texel-only and shading-loss training.
+name: rounding-base
+
+train:
+  steps: 20000
+  qat_start: 0.7
+
+grids:
+  m: [[4, 16], [8, 16]]
+
+losses:
+  texel: {w_texel: 1.0, w_shading: 0.0}
+  shade4: {w_texel: 1.0, w_shading: 4.0}
+
+sweep:
+  material: [metal_plate, rough_wood, castle_brick_07, aerial_rocks_02, denim_fabric, rusty_metal_02]
+  grids: [m]
+  loss: [texel, shade4]
+  fmt: [mxfp4, nvfp4]
+  seed: [0, 1]

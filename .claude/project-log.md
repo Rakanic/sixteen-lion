@@ -1,7 +1,7 @@
 ---
 project: Sixteen Wide — neural texture decoders for GPU matrix hardware
 goal: Bistro at 1920×1080 rendered in real time with every material stored in block-scaled (MX / NVFP4) neural textures trained with shading-aware quantization, beating texel-loss QAT on FLIP-after-shading at equal memory, in a 4–6 page SIGGRAPH-format paper.
-status: compressor running; contribution under test
+status: decoder v1 works; 4-neighbour model + FP4-direct kernel in progress
 code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 ---
 
@@ -9,17 +9,17 @@ code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 
 ## Now
 
-Proposal accepted with feedback "missing graphics novelty". Contribution is now **shading-aware block-scaled quantization** (main) with **latent-space stochastic filtering** (supporting). Paper skeleton is written. The PyTorch compressor runs all 9 latent formats with QAT, GGX shading loss and FLIP eval (`results/`); the shading loss helps at every precision, so the quantization-specific half of the contribution (block scales / rounding) is now what must carry novelty. No CUDA decoder yet. Milestone is due **Sun 2026-11-22, 23:59 PT** (2 days); there are no late days.
+Proposal accepted with feedback "missing graphics novelty". Main contribution is now a **real-time decoder that feeds 4-bit block-scaled latents straight into Blackwell FP4 Tensor Cores** (STF makes this possible); the quantization experiments (`results/README.md`) become a "what matters" study, with **rendering-aware rounding** as a supporting technique. Compressor done; decoder v1 (FP16 MMA) matches PyTorch at 0.8–1.2 ms per 1080p frame; the 4-neighbour model, where **the four neighbouring latent texels map onto the four scale blocks of one FP4 MMA**, is being trained, then the FP4-direct kernel. Milestone is due **Sun 2026-11-22, 23:59 PT** (2 days); there are no late days.
 
 ```mermaid
 flowchart LR
   TEX[("PBR textures<br/>Poly Haven / Bistro")] --> CMP["compressor<br/>PyTorch + QAT"]
-  CMP --> SL["shading-aware quant.<br/>GGX loss + block scales"]
+  CMP --> SL["GGX loss +<br/>rendering-aware rounding"]
   SL --> CMP
   CMP --> LAT[("latent grid<br/>MXFP4/6/8, NVFP4")]
   CMP --> W[("decoder weights<br/>FP16 / INT8")]
-  LAT --> FLT{"latent filter<br/>STF / 2×2 quad"}
-  FLT --> DEC["CUDA decoder<br/>Tensor Core, width 16"]
+  LAT --> FLT{"latent filter<br/>STF: one FP4 tap"}
+  FLT --> DEC["CUDA decoder<br/>FP4 block-scaled MMA"]
   W --> DEC
   DEC --> SH["shading<br/>GGX + spec-AA"]
   SH --> FB["Bistro frame<br/>1920×1080"]
@@ -32,7 +32,7 @@ flowchart LR
 | bits per texel, 9 channels (BC1+BC5+BC1 = 16) | lower at equal quality | 5.3 (MXFP4) / 5.7 (NVFP4), mid grid |
 | PSNR after shading vs uncompressed (dB) | report per format | 32.5–33.9 MXFP4, texel loss; +1.8 dB with shading loss |
 | FLIP after shading (mean) | lower with shading-aware quant. than texel loss | −15 % MXFP4, −23 % fp32 (shading loss alone) |
-| decode time (µs per Mpixel) | report FP16 vs INT8 | — |
+| decode time (µs per Mpixel) | FP4-direct vs FP16-unpack | 400–560 (v1, FP16 MMA, GPUs under load) |
 | formats working end to end | 5 (MXINT8, MXFP8, MXFP6, MXFP4, NVFP4) | 5 in compressor, 0 in decoder |
 
 ### Open
@@ -57,13 +57,15 @@ Technical, by priority:
 
 - [x] P0 compressor: latent grid + MLP, fake-quant for uniform 8/4-bit, MXINT8, MXFP8, MXFP6, MXFP4, NVFP4; QAT with straight-through estimator
 - [x] P0 fit 3 Poly Haven materials, quality-vs-bits plot + side-by-side crops (milestone figure)
-- [ ] P1 shading-aware **block scales** at 4 bits vs spec rule vs MSE-optimal (`configs/scale-select.yaml`, running)
-- [ ] P1 shading-aware **rounding** of near-boundary latents (31–33 % sit on a boundary after QAT)
-- [ ] P1 evaluate under lighting not seen in training (env map), so the shading loss is not scored by its own shader
-- [ ] P0 CUDA decoder for one material on Tensor Cores (FP16 MMA, width 16)
+- [x] P1 shading-aware block scales: worse than the spec rule in 12/12 cases (negative result)
+- [x] P1 rendering-aware rounding pilot: −3 to −10 % FLIP on 3 materials, beats texel-aware rounding on all
+- [ ] P1 rounding robustness: 6 materials × 2 seeds × MXFP4/NVFP4 × texel/shading training, unseen lighting (`configs/rounding-base.yaml`, running)
+- [x] P0 CUDA decoder v1 for one material: NVFP4 latents, FP16 MMA, matches PyTorch (max err 1.3e-3)
+- [x] P0 FP4 block-scaled MMA verified on RTX PRO 6000: `m16n8k64 kind::mxf4 block_scale`, needs target `sm_120a`
+- [ ] P0 4-neighbour (`concat4`) model: quality vs bilinear at equal memory (`out/concat4-pilot`, running)
+- [ ] P0 decoder v2: layer 1 as two FP4 block-scaled MMAs (one per grid), output-space STF; time vs v1 on an idle GPU
 - [ ] P0 Bistro loads with original textures in the renderer
-- [ ] P1 **contribution: shading-aware block-scaled quantization**: QAT whose loss is GGX-shaded radiance (random light/view), plus per-block scale choice that minimizes shading error instead of the MX spec's max-abs rule
-- [ ] P1 ablation for the contribution: texel-L2 QAT vs shading-loss QAT vs shading-loss + shading-aware scales, per format, at equal memory (FLIP + PSNR after shading)
+- [ ] P1 decode time vs latent format (FP4 / FP6 / FP8 / FP16 MMA) and Bistro frame time: the paper's headline numbers
 - [ ] P1 all Bistro materials compressed, decoder wired into renderer, per-pixel LOD
 - [ ] P1 BC1 baseline at equal memory
 - [ ] P1 **supporting: latent-space filtering with STF** + temporal stability vs bit width (flicker under camera motion)
@@ -71,7 +73,6 @@ Technical, by priority:
 - [ ] P2 footprint-aware precision (fewer bits for coarse mips)
 - [ ] P3 stretch: 2×2-quad decode per evaluation, auto bit allocation, second GPU, open benchmark
 - [ ] Literature check before claiming novelty: Thread-Efficient Decoding for NTC (2026), NTC with Hypernetworks (2026), Fujieda & Harada 2024, Weinreich et al. 2024 (block-compressed neural features)
-- [ ] Pick the exact GPU and write down its Tensor Core FP4/FP6 support
 - [ ] Fix "Fuijeda and Harada 2024" citation (spelling, title, venue)
 
 ## Terms
@@ -90,6 +91,10 @@ Technical, by priority:
 - **FLIP**: NVIDIA's perceptual image difference metric for rendered images.
 - **QAT oscillation**: latents that keep crossing a rounding boundary under the straight-through gradient, so their final rounding is near random.
 - **sensitivity**: accumulated squared gradient of the training loss per latent value; how much that value moves the loss.
+- **block-scaled MMA**: a Tensor Core instruction that takes FP4/FP6/FP8 operands plus their per-block scales and multiplies them without unpacking to FP16.
+- **rendering-aware rounding**: after training, choosing up or down for near-boundary latents by the shaded-image error (decoder frozen, same storage).
+- **concat4**: the compressor mode that feeds the 4 nearest latent texels of each grid to the MLP as stored, instead of blending them.
+- **output-space STF**: each pixel decodes one randomly chosen full-resolution texel per frame and TAA averages the colors; correct because colors are linear.
 - **BC1**: hardware block compression format; the memory/quality baseline.
 - **Bistro**: Amazon Lumberyard Bistro scene, the full-scene test.
 
@@ -196,7 +201,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   TEX[("PBR textures")] --> CMP["compressor<br/>QAT"]
-  CMP --> SL["shading-aware quant.<br/>GGX loss + block scales"]
+  CMP --> SL["GGX loss +<br/>rendering-aware rounding"]
   SL --> CMP
   CMP --> LAT[("latent grid<br/>MX / NVFP4")]
 ```
@@ -234,3 +239,95 @@ flowchart LR
 - [ ] Scale-selection and sensitivity-aware rounding results at 4 bits (texel- vs shading-weighted)
 - [ ] Eval under unseen lighting; longer training for paper numbers (50k steps adds 0.4–0.9 dB)
 - [ ] Remove stale uv files (`pyproject.toml`, `uv.lock`); pixi is the package manager
+
+### 2026-11-21 · Paper plan: decoder-first, quantization as study
+
+> Quantization gains are modest (3–10 % FLIP) and close to known methods, so the paper's main claim moves to decoding FP4 latents directly on Blackwell Tensor Cores.
+
+#### Before
+
+```mermaid
+flowchart LR
+  C1["main: shading-aware<br/>block-scaled quant."] --> P["paper"]
+  C2["supporting:<br/>STF latent filter"] --> P
+  DEC["CUDA decoder<br/>FP16 MMA"] --> P
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  DEC["main: FP4-direct decoder<br/>block-scaled MMA"] --> P["paper"]
+  C2["STF: one FP4 tap<br/>enables FP4-direct"] --> DEC
+  ST["study: formats,<br/>shading loss, QAT"] --> P
+  C1["rendering-aware<br/>rounding"] --> P
+```
+
+#### Decisions
+
+- **Headline = decoder that feeds 4-bit block-scaled latents to the FP4 Tensor Core path.** Bilinear filtering mixes four taps into non-FP4 values; one STF tap keeps the stored codes and scale intact, so decode skips unpacking to FP16.
+- **Quantization results become a "what matters" section.** Format barely changes quality per bit, the shading loss is general, a third of latents round near-randomly after QAT, scale selection hurts; rendering-aware rounding is one supporting technique.
+- **Rejected: rendering-aware rounding as the main claim.** It is AdaRound with a rendering loss and gains 3–10 % FLIP; reviewers would call it incremental.
+
+#### Paper outline (4–6 pages, acmtog)
+
+| § | content | figure / table |
+|---|---|---|
+| 1 Intro | NTC meets block-scaled matrix hardware; 3 contributions | teaser: Bistro, FP4 materials |
+| 2 Related | NTC, neural materials, block-compressed features, thread-efficient NTC decoding, MX/NVFP4, QAT + AdaRound, STF | — |
+| 3 Formats | MX / NVFP4 recap; one NVFP4 block = one texel's 16 latents | block-to-texel layout |
+| 4 Method | compressor + shading loss; STF tap → FP4 MMA fragments; rendering-aware rounding | decoder dataflow |
+| 5 Results | format curves; shading loss + control; rounding (seeds, unseen light); decode µs/Mpix per format; Bistro ms; BC1/BC5 at equal memory | RD curves, rounding table, timing bars, crops |
+| 6 Lessons | scale selection fails, QAT oscillation, what we'd change | — |
+| 7 Conclusion | + per-member contributions (course rule) | — |
+
+#### Open
+
+- [ ] Literature check: does Thread-Efficient Decoding for NTC (2026) or the NTC SDK already decode FP4 latents with block-scaled MMA?
+- [ ] Decoder for one material by ~11/25; Bistro wiring by ~11/29; timing + paper from 11/30
+
+### 2026-11-21 · Decoder v1 and the FP4 MMA mapping
+
+> First CUDA decoder matches PyTorch; blending latents before the MLP blocks FP4-direct decode and biases STF, so the model moves to 4 raw neighbours = one FP4 MMA.
+
+#### Before
+
+```mermaid
+flowchart LR
+  LAT[("latent grid<br/>NVFP4")] --> FLT{"latent filter<br/>bilinear / 1 STF tap"}
+  FLT --> DEQ["unpack<br/>FP4 → FP16"]
+  DEQ --> DEC["MLP<br/>FP16 MMA"]
+  DEC --> SH["shading"]
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  LAT[("latent grid<br/>NVFP4")] --> N4["4 neighbours<br/>raw codes + scales"]
+  N4 --> DEC["layer 1: FP4 MMA<br/>K = 4 × 16"]
+  DEC --> MLP["layers 2–3<br/>FP16 MMA"]
+  MLP --> STF{"output STF<br/>one texel / frame"}
+  STF --> SH["shading"]
+```
+
+#### Decisions
+
+- **Contribution statement: "the four neighbouring latent texels map onto the four scale blocks of one FP4 MMA."** A 16-channel texel is one NVFP4 block; four of them are the K = 64 operand and four block scales of `m16n8k64` block-scaled MMA, so stored codes reach the Tensor Core unpacked.
+- **Filter in output space, not latent space.** One random latent tap decoded and averaged over 64 frames stays 20.6 dB from the bilinear decode, because the MLP is nonlinear; averaging decoded colors is exact.
+- **Rejected: latent-space STF as the FP4-direct path.** It was the plan in the 11-20 entry; measured bias rules it out.
+
+#### Results
+
+| metric | value |
+|---|---|
+| kernel vs PyTorch, same taps (max / mean abs err) | 1.3e-3 / 1.0e-4 |
+| 1080p frame, one lookup per pixel, v1 FP16 MMA | 0.83–1.16 ms (GPUs 95 % busy) |
+| speedup vs PyTorch fp16 | 36–45× |
+| latent-STF average vs bilinear decode, 64 frames | 20.6 dB |
+| NVFP4 latents, castle_brick_07, mid grid | 2.95 MB (5.6 bits/texel) |
+
+#### Open
+
+- [ ] concat4 quality vs bilinear; if it loses, try wider layer 1 or more channels in grid 1
+- [ ] v2 kernel timing on an idle GPU; Bistro wiring

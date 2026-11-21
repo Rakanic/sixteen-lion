@@ -120,7 +120,7 @@ def crop_grid(sweep_dir, df, material, grid, out, fmts=("fp32", "mxfp8", "mxfp6"
 
 def loss_bars(df, metric, out):
     label, _ = METRICS[metric]
-    losses = list(dict.fromkeys(df.loss_name))
+    losses = sorted(set(df.loss_name), key=lambda l: (l != "texel", l))  # baseline first
     mats = sorted(df.material.unique())
     fmts = [f for f in FORMAT_ORDER if f in set(df.fmt)]
     fig, axes = plt.subplots(1, len(mats), figsize=(3.4 * len(mats), 2.8), squeeze=False, facecolor="#fcfcfb")

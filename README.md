@@ -12,9 +12,13 @@ paper is in `paper/` (Overleaf submodule).
   - `shading.py`: differentiable GGX shading (training loss and evaluation)
   - `train.py`: QAT training and evaluation of one run
   - `sweep.py`, `figures.py`: sweeps from `configs/`, plots and tables
-- `python/tests/`: unit tests
+  - `decoder.py`: packing + binding for the CUDA decoder (`cuda/ntc_decode.cu`)
+- `cuda/`: Tensor Core decoder kernel; `cuda/probe/` checks block-scaled FP4 MMA (build target `sm_120a`)
+- `python/tests/`: unit tests (decoder tests need a GPU and a trained NVFP4 checkpoint)
+- `results/`: finished experiments, with `results/README.md` as the step-by-step summary
+- `docs/paper-brief.md`: contributions, outline and figure list for the paper
 - `configs/`: sweep definitions
-- `tools/`: data download
+- `tools/`: data download, latent profiling, rounding experiment, decoder benchmark
 - `out/`: run outputs (not tracked)
 
 ## Quick start

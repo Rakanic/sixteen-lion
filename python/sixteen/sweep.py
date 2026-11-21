@@ -28,7 +28,8 @@ def expand(cfg):
         run = dict(zip(keys, combo))
         grid_name = run.pop("grids")
         loss_name = run.pop("loss", "texel")
-        name = f"{run['material']}/{grid_name}/{loss_name}/{run['fmt']}"
+        extra = "".join(f"_{k}-{v}" for k, v in run.items() if k not in ("material", "fmt"))
+        name = f"{run['material']}/{grid_name}/{loss_name}/{run['fmt']}{extra}"
         kw = {**cfg.get("train", {}), **cfg.get("losses", {}).get(loss_name, {}), **run}
         kw["grids"] = [tuple(g) for g in cfg["grids"][grid_name]]
         yield name, kw

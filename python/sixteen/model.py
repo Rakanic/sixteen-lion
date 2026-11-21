@@ -1,10 +1,16 @@
 """Neural texture: latent grids + a small MLP decoder.
 
 Each grid is a learned [h, w, C] feature table (channels last, so blocks of the
-quantizer run along a texel's channels). A query at uv samples every grid with
-wrap-around bilinear filtering, concatenates the features with a positional
+quantizer run along a texel's channels). A query at uv samples every grid, concatenates the features with a positional
 encoding of the position inside the finest grid cell, and decodes all material
-channels with one MLP call.
+channels with one MLP call. Two ways to sample a grid (`filter`):
+
+- "bilinear": blend the 4 nearest latent texels (the values are no longer
+  representable in the latent format, so a decoder must unpack them first);
+- "concat4": pass the 4 nearest latent texels side by side, as stored, plus
+  the fractional position inside each grid's cell; the MLP learns the blend.
+  With 16 channels, 4 texels = 64 values = 4 NVFP4 blocks = the K dimension
+  and the 4 scale blocks of one FP4 block-scaled MMA.
 
 Storage cost = latent values * bits/value (format) + MLP weights at fp16.
 """
@@ -15,6 +21,26 @@ import torch
 import torch.nn as nn
 
 from .quant import BITS_PER_VALUE, fake_quant, quantize
+
+
+def neighbours4_wrap(grid, uv):
+    """The 4 nearest texels of grid [h, w, C] at uv, tiling.
+
+    Returns features [N, 4C] in the order (x0,y0), (x1,y0), (x0,y1), (x1,y1)
+    and the fractional position (fx, fy) [N, 2] of uv between them.
+    """
+    h, w, c = grid.shape
+    x = uv[:, 0] * w - 0.5
+    y = uv[:, 1] * h - 0.5
+    x0, y0 = torch.floor(x), torch.floor(y)
+    frac = torch.stack([x - x0, y - y0], dim=-1)
+    x0 = x0.long() % w
+    y0 = y0.long() % h
+    x1 = (x0 + 1) % w
+    y1 = (y0 + 1) % h
+    flat = grid.reshape(-1, c)
+    taps = [flat[y0 * w + x0], flat[y0 * w + x1], flat[y1 * w + x0], flat[y1 * w + x1]]
+    return torch.cat(taps, dim=-1), frac
 
 
 def bilinear_wrap(grid, uv):
@@ -36,9 +62,11 @@ def bilinear_wrap(grid, uv):
 
 
 class NeuralTexture(nn.Module):
-    def __init__(self, res, out_channels, grids=((4, 16), (8, 16)), hidden=64, layers=2, pe_freqs=2):
+    def __init__(self, res, out_channels, grids=((4, 16), (8, 16)), hidden=64, layers=2, pe_freqs=2, filter="bilinear"):
         """`grids` lists (downsample factor, channels) per latent grid; `res` is (H, W)."""
         super().__init__()
+        assert filter in ("bilinear", "concat4")
+        self.filter = filter
         H, W = res
         self.grid_shapes = [(H // s, W // s, c) for s, c in grids]
         self.latents = nn.ParameterList(
@@ -46,7 +74,9 @@ class NeuralTexture(nn.Module):
         )
         self.fine_res = torch.tensor([self.grid_shapes[0][1], self.grid_shapes[0][0]], dtype=torch.float32)
         self.pe_freqs = pe_freqs
-        dims = [sum(c for *_, c in self.grid_shapes) + 4 * pe_freqs] + [hidden] * layers + [out_channels]
+        n_lat = sum(c for *_, c in self.grid_shapes) * (4 if filter == "concat4" else 1)
+        n_frac = 2 * len(self.grid_shapes) if filter == "concat4" else 0
+        dims = [n_lat + 4 * pe_freqs + n_frac] + [hidden] * layers + [out_channels]
         mods = []
         for i in range(len(dims) - 1):
             mods.append(nn.Linear(dims[i], dims[i + 1]))
@@ -54,6 +84,7 @@ class NeuralTexture(nn.Module):
                 mods.append(nn.ReLU())
         self.mlp = nn.Sequential(*mods)
         self.fmt = None  # latent format used in forward(); None = full precision
+        self.scale_choice = [None] * len(self.latents)  # per-block scale choices (None = spec rule)
 
     def encode_pos(self, uv):
         p = uv * self.fine_res.to(uv.device) * 2 * math.pi
@@ -65,11 +96,16 @@ class NeuralTexture(nn.Module):
     def quantized_latents(self, fmt=None, hard=False):
         fmt = self.fmt if fmt is None else fmt
         q = quantize if hard else fake_quant
-        return [q(g, fmt) for g in self.latents]
+        choices = self.scale_choice if fmt == self.fmt else [None] * len(self.latents)
+        return [q(g, fmt, c) for g, c in zip(self.latents, choices)]
 
     def forward(self, uv, latents=None):
         latents = self.quantized_latents() if latents is None else latents
-        feats = [bilinear_wrap(g, uv) for g in latents] + [self.encode_pos(uv)]
+        if self.filter == "bilinear":
+            feats = [bilinear_wrap(g, uv) for g in latents] + [self.encode_pos(uv)]
+        else:
+            taps, fracs = zip(*[neighbours4_wrap(g, uv) for g in latents])
+            feats = list(taps) + [self.encode_pos(uv)] + list(fracs)
         return self.mlp(torch.cat(feats, dim=-1))
 
     @torch.no_grad()

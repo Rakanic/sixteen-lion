@@ -98,12 +98,21 @@ def mx_quant(x, elem, block=32, scale_offset=None):
     return _unblocks(q * scale, pad, x.shape)
 
 
-def nvfp4_quant(x, block=16):
-    """NVFP4: E2M1 elements, E4M3 scale per 16 values, fp32 scale per tensor."""
+def nvfp4_quant(x, block=16, target=None):
+    """NVFP4: E2M1 elements, E4M3 scale per 16 values, fp32 scale per tensor.
+
+    The block scale maps the block's max-abs value to `target` (default 6, the
+    E2M1 maximum). An optional per-block `target` tensor picks other scales: a
+    target below 6 avoids nothing but coarsens the grid, above 6 clips the
+    largest values to get a finer grid for the rest.
+    """
     b, pad = _blocks(x, block)
     amax_t = b.abs().amax().clamp(min=1e-12)
+    # The per-tensor scale follows the spec in both cases, so target = 6
+    # reproduces it exactly; a block scale above the E4M3 range saturates.
     gscale = amax_t / (E2M1.max * E4M3.max)
-    bscale = b.abs().amax(dim=1, keepdim=True) / E2M1.max
+    t = E2M1.max if target is None else target.view(-1, 1)
+    bscale = b.abs().amax(dim=1, keepdim=True) / t
     bscale_q = round_minifloat(bscale / gscale, E4M3) * gscale
     bscale_q = torch.where(bscale_q > 0, bscale_q, torch.ones_like(bscale_q))
     q = round_minifloat(b / bscale_q, E2M1) * bscale_q
@@ -142,14 +151,49 @@ BITS_PER_VALUE = {
 }
 
 
-def quantize(x, fmt):
+# Per-block scale candidates for scale selection. MX scales are powers of two,
+# so the choice is an exponent offset from the spec's max-abs rule (+1 = no
+# clipping, coarser; -1 = clip more, finer). NVFP4 picks the value the block's
+# max-abs maps to.
+MX_ELEM = {"mxint8": "int8", "mxfp8": E4M3, "mxfp6": E2M3, "mxfp4": E2M1}
+SCALE_CHOICES = {**{f: (-1.0, 0.0, 1.0) for f in MX_ELEM}, "nvfp4": (4.0, 5.0, 6.0, 7.0, 8.0)}
+BLOCK = {**{f: 32 for f in MX_ELEM}, "nvfp4": 16}
+
+
+def quantize(x, fmt, choice=None):
+    """`choice`: optional per-block tensor of SCALE_CHOICES values (None = spec rule)."""
     if fmt in (None, "fp32"):
         return x
-    return QUANTIZERS[fmt](x)
+    if choice is None:
+        return QUANTIZERS[fmt](x)
+    if fmt == "nvfp4":
+        return nvfp4_quant(x, target=choice)
+    return mx_quant(x, MX_ELEM[fmt], scale_offset=choice)
 
 
-def fake_quant(x, fmt):
+def fake_quant(x, fmt, choice=None):
     """Quantize in the forward pass, identity gradient in the backward pass."""
     if fmt in (None, "fp32"):
         return x
-    return x + (quantize(x.detach(), fmt) - x).detach()
+    return x + (quantize(x.detach(), fmt, choice) - x).detach()
+
+
+@torch.no_grad()
+def choose_scales(x, fmt, weights=None):
+    """Per block, the SCALE_CHOICES candidate minimizing sum(w * (q - x)^2).
+
+    weights=None gives the MSE-optimal scale; weights = per-value loss
+    sensitivity gives a sensitivity-weighted choice. The result costs no
+    storage: it is a different value of the block scale the format stores anyway.
+    """
+    cands = SCALE_CHOICES[fmt]
+    w = torch.ones_like(x) if weights is None else weights
+    xb, _ = _blocks(x, BLOCK[fmt])
+    wb, _ = _blocks(w, BLOCK[fmt])
+    errs = []
+    for c in cands:
+        ch = torch.full((xb.shape[0],), c, device=x.device)
+        qb, _ = _blocks(quantize(x, fmt, ch), BLOCK[fmt])
+        errs.append((wb * (qb - xb) ** 2).sum(dim=1))
+    best = torch.stack(errs).argmin(dim=0)
+    return torch.tensor(cands, device=x.device)[best]

@@ -4,3 +4,4 @@ __pycache__/
 .pixi/
 out/
 data/
+cuda/probe/mma_fp4_probe

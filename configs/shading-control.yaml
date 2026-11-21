@@ -1,0 +1,21 @@
+# Control for the shading pilot: does the shading-loss gain grow as the
+# latent bit width drops? Same grid/steps/seed as shading-pilot.yaml; this
+# adds the unquantized and 6-bit points (4- and 8-bit come from the pilot).
+name: shading-control
+
+train:
+  steps: 20000
+  qat_start: 0.7
+
+grids:
+  m: [[4, 16], [8, 16]]
+
+losses:
+  texel: {w_texel: 1.0, w_shading: 0.0}
+  shade4: {w_texel: 1.0, w_shading: 4.0}
+
+sweep:
+  material: [metal_plate, rough_wood, castle_brick_07]
+  grids: [m]
+  loss: [texel, shade4]
+  fmt: [fp32, fp16, mxfp6]

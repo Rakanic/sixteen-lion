@@ -58,3 +58,16 @@ def test_nvfp4_shape_and_ste():
     assert nvfp4_quant(x.detach()).shape == x.shape
     fake_quant(x, "nvfp4").sum().backward()
     assert torch.equal(x.grad, torch.ones_like(x))
+
+
+def test_scale_choice_default_matches_spec():
+    from sixteen.quant import BLOCK, choose_scales
+
+    torch.manual_seed(0)
+    x = torch.randn(64, 16)
+    for fmt, default in [("mxfp4", 0.0), ("nvfp4", 6.0)]:
+        ch = torch.full((x.numel() // BLOCK[fmt],), default)
+        assert torch.allclose(quantize(x, fmt, ch), quantize(x, fmt), atol=1e-6)
+        # MSE-optimal choice is never worse than the spec rule.
+        best = quantize(x, fmt, choose_scales(x, fmt))
+        assert (best - x).pow(2).sum() <= (quantize(x, fmt) - x).pow(2).sum() + 1e-6
