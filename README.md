@@ -1,0 +1,32 @@
+# Sixteen Wide
+
+Neural texture compression with block-scaled latents (MX / NVFP4) and
+shading-aware quantization-aware training. CS184/284A final project; the
+paper is in `paper/` (Overleaf submodule).
+
+## Layout
+
+- `python/sixteen/`: compressor (PyTorch)
+  - `quant.py`: fake quantization for fp16, int8/int4, MXINT8, MXFP8, MXFP6, MXFP4, NVFP4
+  - `model.py`: latent grids + MLP decoder
+  - `shading.py`: differentiable GGX shading (training loss and evaluation)
+  - `train.py`: QAT training and evaluation of one run
+  - `sweep.py`, `figures.py`: sweeps from `configs/`, plots and tables
+- `python/tests/`: unit tests
+- `configs/`: sweep definitions
+- `tools/`: data download
+- `out/`: run outputs (not tracked)
+
+## Quick start
+
+Install [pixi](https://pixi.sh), then from the repository root:
+
+```bash
+pixi run fetch                                       # 3 Poly Haven materials into data/
+pixi run test
+CUDA_VISIBLE_DEVICES=0 pixi run sweep configs/milestone.yaml --shard 0/4   # ... shards 1-3 in parallel
+pixi run figures out/milestone --out <plots dir>
+```
+
+Each run writes `out/<sweep>/<material>/<grid>/<loss>/<format>/metrics.json`
+plus image crops; finished runs are skipped, so sweeps resume.

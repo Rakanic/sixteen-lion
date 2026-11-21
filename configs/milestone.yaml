@@ -1,0 +1,24 @@
+# Milestone figure: quality vs bits per texel for every latent format, at
+# three latent-grid sizes, on three Poly Haven materials (2k, 9 channels:
+# albedo, normal, AO/roughness/metalness). Texel-L2 QAT only (the baseline
+# the shading-aware loss must beat).
+name: milestone
+
+train:
+  steps: 20000
+  qat_start: 0.7
+
+# (downsample factor, channels) per latent grid; bpp scales with values/texel
+grids:
+  s: [[8, 16], [16, 16]]   # 0.31 values/texel
+  m: [[4, 16], [8, 16]]    # 1.25 values/texel
+  l: [[2, 16], [4, 16]]    # 5.0  values/texel
+
+losses:
+  texel: {w_texel: 1.0, w_shading: 0.0}
+
+sweep:
+  material: [metal_plate, rough_wood, castle_brick_07]
+  grids: [s, m, l]
+  loss: [texel]
+  fmt: [fp32, fp16, int8, int4, mxint8, mxfp8, mxfp6, mxfp4, nvfp4]

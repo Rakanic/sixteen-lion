@@ -1,0 +1,25 @@
+[project]
+name = "sixteen-wide"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.7",
+  "numpy",
+  "pillow",
+  "imageio",
+  "matplotlib",
+  "flip-evaluator",
+  "pyyaml",
+  "tqdm",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv]
+package = false

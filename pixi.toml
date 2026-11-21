@@ -1,0 +1,29 @@
+[workspace]
+name = "sixteen-wide"
+description = "Sixteen Wide: block-scaled neural texture compression with shading-aware quantization"
+channels = ["conda-forge"]
+platforms = [{ name = "linux-64-cuda", platform = "linux-64", cuda = "12" }]
+
+[dependencies]
+python = "3.12.*"
+numpy = ">=2"
+matplotlib = ">=3.9"
+pandas = ">=2.2"
+pyyaml = ">=6"
+pillow = ">=10"
+imageio = ">=2.34"
+pytest = ">=8"
+cuda-version = "12.9.*"
+pytorch = { version = ">=2.7", build = "cuda*" }
+
+[pypi-dependencies]
+flip-evaluator = ">=1.6"
+
+[activation.env]
+PYTHONPATH = "$PIXI_PROJECT_ROOT/python"
+
+[tasks]
+fetch = "python tools/fetch_polyhaven.py"
+test = "python -m pytest -q python/tests"
+sweep = "python -m sixteen.sweep"
+figures = "python -m sixteen.figures"
