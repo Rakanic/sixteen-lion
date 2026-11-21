@@ -1,7 +1,7 @@
 ---
 project: Sixteen Wide — neural texture decoders for GPU matrix hardware
 goal: Bistro at 1920×1080 rendered in real time with every material stored in block-scaled (MX / NVFP4) neural textures trained with shading-aware quantization, beating texel-loss QAT on FLIP-after-shading at equal memory, in a 4–6 page SIGGRAPH-format paper.
-status: decoder v1 works; 4-neighbour model + FP4-direct kernel in progress
+status: decoder v1 works; 4-neighbour model + FP4-direct kernel in progress; milestone report + paper draft in paper/ (not yet pushed to Overleaf)
 code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 ---
 
@@ -40,7 +40,7 @@ flowchart LR
 Course deliverables (team includes 284A, so all CS284A rules apply):
 
 - [ ] **Milestone — Sun 11/22 23:59 PT** → Gradescope "[Final Project] Milestone": PDF in ACM SIGGRAPH template, with clickable links to webpage, slides and video
-- [ ] Milestone report (paper format, ~1 page of content): what's done, preliminary results, progress vs plan, updated plan
+- [ ] Milestone report (paper format, ~1 page of content): what's done, preliminary results, progress vs plan, updated plan — drafted in `paper/milestone.tex` (61f56d6); needs links, team read, push to Overleaf
 - [ ] Milestone video: ~1 min, every member appears or speaks, unlisted YouTube or Berkeley-visible Drive
 - [ ] Milestone slides: 2–3 slides, linked from the webpage
 - [ ] Persistent project webpage (GitHub Pages) linking report, video, slides
@@ -331,3 +331,49 @@ flowchart LR
 
 - [ ] concat4 quality vs bilinear; if it loses, try wider layer 1 or more channels in grid 1
 - [ ] v2 kernel timing on an idle GPU; Bistro wiring
+
+### 2026-11-21 · Paper drafted: milestone report and full skeleton
+
+> Milestone report written from `results/`; `main.tex` has intro through results study. Timing, Bistro and BC baseline stay as red `\todo`.
+
+#### Before
+
+```mermaid
+flowchart LR
+  RES[("results/")] --> BR["paper-brief.md"]
+  BR --> PAP["paper/<br/>empty skeleton"]
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  RES[("results/")] --> BR["paper-brief.md"]
+  GPU["GPU session"] --> QA["paper-agent-qa.md"]
+  BR --> PAP["paper/<br/>milestone + main draft"]
+  QA --> PAP
+  FIG["TikZ diagrams<br/>mapping, decoder"] --> PAP
+  PAP --> MS["milestone.pdf<br/>2 pages + refs"]
+  PAP --> MAIN["main.pdf<br/>4 pages + refs"]
+```
+
+#### Decisions
+
+- **Title now leads with C1: "Decoding FP4 Neural Textures Directly on Block-Scaled Tensor Cores".** The old title named shading-aware quantization, which the results demoted to a baseline.
+- **Every number is recomputed from the CSVs and commented with its file; anything unmeasured is a red `\todo`.** Shading-loss gains use the `shade4` runs (fp32 −23.1 %, MXFP4 −15.4 %).
+- **Diagrams are TikZ (black outlines, Helvetica), not images.** They stay editable in Overleaf and match the attached figure style.
+
+#### Results
+
+| metric | value |
+|---|---|
+| milestone.pdf | 2 pages + references |
+| main.pdf | 4 pages + references |
+| open `\todo` in main.tex | concat4 quality, v2 timing, Bistro, BC baseline, final rounding, teaser |
+
+#### Open
+
+- [ ] Push paper commit 61f56d6 to Overleaf after a team read
+- [ ] Webpage, slides, video URLs in milestone
+- [ ] `results/README.md` step 2 says −10 to −33 % FLIP; the CSV (`shade4`) gives −8.8 to −32.5 %. Paper uses the CSV
+- [ ] Verify bib entries: Weinreich 2024, Fujieda & Harada 2024 title, Bistro, PTX ISA
