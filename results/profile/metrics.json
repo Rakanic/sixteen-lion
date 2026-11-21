@@ -1,0 +1,48 @@
+{
+ "psnr_texel": 32.298840592562875,
+ "psnr_albedo": 33.1047045731821,
+ "psnr_normal": 32.05916630431619,
+ "psnr_arm": 31.835370059362663,
+ "psnr_shaded_overhead": 35.53900008423892,
+ "flip_overhead": 0.058544401079416275,
+ "psnr_shaded_grazing": 31.31782314418271,
+ "flip_grazing": 0.06126651167869568,
+ "psnr_shaded_specular": 34.459657243232954,
+ "flip_specular": 0.057852376252412796,
+ "psnr_shaded": 33.772160157218195,
+ "flip": 0.05922109633684158,
+ "material": "castle_brick_07",
+ "fmt": "mxfp4",
+ "grids": [
+  [
+   4,
+   16
+  ],
+  [
+   8,
+   16
+  ]
+ ],
+ "loss": "texel+4*shading",
+ "scale_mode": "max",
+ "bpp_latent": 5.3125,
+ "bpp_total": 5.340610504150391,
+ "train_s": 527.5180885791779,
+ "final_loss": 0.00227431976236403,
+ "cfg": {
+  "steps": 20000,
+  "qat_start": 0.7,
+  "batch": 262144,
+  "lr_latent": 0.01,
+  "lr_mlp": 0.002,
+  "hidden": 64,
+  "layers": 2,
+  "w_texel": 1.0,
+  "w_shading": 4.0,
+  "seed": 0,
+  "scale_mode": "max",
+  "refresh_every": 250,
+  "save_ckpt": true,
+  "res": "2k"
+ }
+}

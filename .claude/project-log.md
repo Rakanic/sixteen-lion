@@ -1,7 +1,7 @@
 ---
 project: Sixteen Wide — neural texture decoders for GPU matrix hardware
 goal: Bistro at 1920×1080 rendered in real time with every material stored in block-scaled (MX / NVFP4) neural textures trained with shading-aware quantization, beating texel-loss QAT on FLIP-after-shading at equal memory, in a 4–6 page SIGGRAPH-format paper.
-status: planning
+status: compressor running; contribution under test
 code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 ---
 
@@ -9,7 +9,7 @@ code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 
 ## Now
 
-Proposal accepted with feedback "missing graphics novelty". Contribution is now **shading-aware block-scaled quantization** (main) with **latent-space stochastic filtering** (supporting). Paper skeleton is written; no code yet. Milestone is due **Sun 2026-11-22, 23:59 PT** (2 days); there are no late days.
+Proposal accepted with feedback "missing graphics novelty". Contribution is now **shading-aware block-scaled quantization** (main) with **latent-space stochastic filtering** (supporting). Paper skeleton is written. The PyTorch compressor runs all 9 latent formats with QAT, GGX shading loss and FLIP eval (`results/`); the shading loss helps at every precision, so the quantization-specific half of the contribution (block scales / rounding) is now what must carry novelty. No CUDA decoder yet. Milestone is due **Sun 2026-11-22, 23:59 PT** (2 days); there are no late days.
 
 ```mermaid
 flowchart LR
@@ -29,11 +29,11 @@ flowchart LR
 | metric | target | now |
 |---|---|---|
 | Bistro frame time at 1920×1080 (ms) | real time (set number by milestone) | — |
-| bytes per material vs BC1 | lower at equal PSNR | — |
-| PSNR after shading vs uncompressed (dB) | report per format | — |
-| FLIP after shading (mean) | lower with shading-aware loss than texel loss | — |
+| bits per texel, 9 channels (BC1+BC5+BC1 = 16) | lower at equal quality | 5.3 (MXFP4) / 5.7 (NVFP4), mid grid |
+| PSNR after shading vs uncompressed (dB) | report per format | 32.5–33.9 MXFP4, texel loss; +1.8 dB with shading loss |
+| FLIP after shading (mean) | lower with shading-aware quant. than texel loss | −15 % MXFP4, −23 % fp32 (shading loss alone) |
 | decode time (µs per Mpixel) | report FP16 vs INT8 | — |
-| formats working end to end | 5 (MXINT8, MXFP8, MXFP6, MXFP4, NVFP4) | 0 |
+| formats working end to end | 5 (MXINT8, MXFP8, MXFP6, MXFP4, NVFP4) | 5 in compressor, 0 in decoder |
 
 ### Open
 
@@ -55,8 +55,11 @@ Course deliverables (team includes 284A, so all CS284A rules apply):
 
 Technical, by priority:
 
-- [ ] P0 compressor: latent grid + MLP, fake-quant for uniform 8/4-bit, MXINT8, MXFP8, MXFP6, MXFP4, NVFP4; QAT with straight-through estimator
-- [ ] P0 fit 3 Poly Haven materials, quality-vs-bits plot + side-by-side crops (milestone figure)
+- [x] P0 compressor: latent grid + MLP, fake-quant for uniform 8/4-bit, MXINT8, MXFP8, MXFP6, MXFP4, NVFP4; QAT with straight-through estimator
+- [x] P0 fit 3 Poly Haven materials, quality-vs-bits plot + side-by-side crops (milestone figure)
+- [ ] P1 shading-aware **block scales** at 4 bits vs spec rule vs MSE-optimal (`configs/scale-select.yaml`, running)
+- [ ] P1 shading-aware **rounding** of near-boundary latents (31–33 % sit on a boundary after QAT)
+- [ ] P1 evaluate under lighting not seen in training (env map), so the shading loss is not scored by its own shader
 - [ ] P0 CUDA decoder for one material on Tensor Cores (FP16 MMA, width 16)
 - [ ] P0 Bistro loads with original textures in the renderer
 - [ ] P1 **contribution: shading-aware block-scaled quantization**: QAT whose loss is GGX-shaded radiance (random light/view), plus per-block scale choice that minimizes shading error instead of the MX spec's max-abs rule
@@ -85,6 +88,8 @@ Technical, by priority:
 - **latent filter**: filtering done on the latent grid before decoding, since texture hardware cannot filter block-scaled values.
 - **spec-AA**: specular anti-aliasing; widen roughness from the variance of filtered normals (Toksvig / LEAN) so quantized normals don't sparkle.
 - **FLIP**: NVIDIA's perceptual image difference metric for rendered images.
+- **QAT oscillation**: latents that keep crossing a rounding boundary under the straight-through gradient, so their final rounding is near random.
+- **sensitivity**: accumulated squared gradient of the training loss per latent value; how much that value moves the loss.
 - **BC1**: hardware block compression format; the memory/quality baseline.
 - **Bistro**: Amazon Lumberyard Bistro scene, the full-scene test.
 
@@ -181,3 +186,51 @@ flowchart LR
 #### Open
 
 - [ ] Ablation design: texel-L2 QAT / shading-loss QAT / shading-loss + shading-aware scales, same bytes per material
+
+### 2026-11-20 · First compressor results: formats, shading loss, latent profile
+
+> Compressor and 4 experiments run. Block-scaled formats share one quality-vs-bits frontier; the shading loss helps 15–23 % FLIP, but no more at 4 bits than at fp32.
+
+#### Before
+
+```mermaid
+flowchart LR
+  TEX[("PBR textures")] --> CMP["compressor<br/>QAT"]
+  CMP --> SL["shading-aware quant.<br/>GGX loss + block scales"]
+  SL --> CMP
+  CMP --> LAT[("latent grid<br/>MX / NVFP4")]
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  TEX[("PBR textures<br/>3 Poly Haven, 2k")] --> CMP["compressor<br/>fp32 → QAT (STE)"]
+  CMP --> SL["GGX shading loss"]
+  SL --> CMP
+  CMP --> SS{"block scale / rounding<br/>by sensitivity"}
+  SS --> LAT[("latent grid<br/>9 formats")]
+  LAT --> EV["eval<br/>FLIP after shading"]
+```
+
+#### Decisions
+
+- **The shading loss is a baseline, not the contribution.** Its FLIP gain is 23 % at fp32/fp16/MXFP8/MXFP6 and 15–17 % at 4 bits, so it is a general training improvement like prior appearance-driven work.
+- **Novelty must come from quantization decisions made by rendered error.** Sensitivity spans ~3 decades and is uncorrelated with magnitude (r = 0.04), so max-abs and MSE rules cannot see it; a third of latents sit on a rounding boundary after QAT.
+- **Rejected: grouped / vector codes over the 4-bit latents.** Measured entropy is 3.77–3.83 bits per 4-bit value and nearly every pair and quad occurs; LUT decoding stays an option for speed.
+
+#### Results
+
+| metric | value |
+|---|---|
+| FLIP, mid grid, MXFP4 vs fp32 (texel loss, 3 mat.) | 0.062 vs 0.046 |
+| FLIP gain from shading loss, fp32 / MXFP4 | −23.1 % / −15.4 % |
+| MX blocks with clipped max (castle_brick_07) | 27 % |
+| latents within 1 % of a rounding boundary, before / after QAT | 4.4 % / 32 % |
+| bits per 4-bit code, measured entropy | 3.83 |
+
+#### Open
+
+- [ ] Scale-selection and sensitivity-aware rounding results at 4 bits (texel- vs shading-weighted)
+- [ ] Eval under unseen lighting; longer training for paper numbers (50k steps adds 0.4–0.9 dB)
+- [ ] Remove stale uv files (`pyproject.toml`, `uv.lock`); pixi is the package manager
