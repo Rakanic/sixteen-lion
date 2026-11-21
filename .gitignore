@@ -5,3 +5,4 @@ __pycache__/
 out/
 data/
 cuda/probe/mma_fp4_probe
+cuda/probe/mma_nvfp4_probe
