@@ -82,6 +82,7 @@ Technical, by priority:
 - **MX formats**: OCP microscaling formats; blocks of 32 values share one 8-bit power-of-two scale (MXINT8, MXFP8, MXFP6, MXFP4).
 - **NVFP4**: NVIDIA's FP4 with 16-value blocks and an FP8 scale.
 - **QAT**: quantization-aware training; the forward pass simulates rounding, gradients pass straight through.
+- **fake quantization**: simulated quantization. The forward pass rounds each value to what the format can represent but keeps it as an ordinary float, so the model trains on exactly the values the decoder will see; the backward pass pretends the rounding was the identity (straight-through estimator), because real rounding has zero gradient. "Fake" as opposed to real packing into 4-bit codes plus scales, which only happens at export (`pack_nvfp4`). Code: `fake_quant` in `python/sixteen/quant.py`.
 - **shading-aware loss**: training loss computed on shaded radiance (GGX under random light/view) instead of on raw texel values.
 - **shading-aware quant.**: the paper's contribution; shading-aware loss during QAT plus block scales chosen to minimize shading error.
 - **paper/**: git submodule pointing at the team's Overleaf project (ACM SIGGRAPH `acmart` template).

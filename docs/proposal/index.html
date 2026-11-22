@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sixteen Wide: neural texture decoders for GPU matrix hardware | CS 184 Final Project Proposal</title>
+  <link rel="stylesheet" href="style.css?v=4">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="course">CS 184/284A: Foundations of Computer Graphics · Final Project Proposal</p>
+      <h1>Sixteen Wide: neural texture decoders for GPU matrix hardware</h1>
+      <p><strong>Team:</strong> Loren Hung, Jim Fang, Marie-Anne Xu, Nicolas Rakela</p>
+      <p><strong>Website:</strong> <a href="https://lorenshung.github.io/cs184-final-project-proposal/">https://lorenshung.github.io/cs184-final-project-proposal/</a></p>
+    </header>
+
+    <nav>
+      <a href="#summary">Summary</a>
+      <a href="#problem">Problem</a>
+      <a href="#goals">Goals &amp; Deliverables</a>
+      <a href="#schedule">Schedule</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <section id="summary">
+      <p>
+        Neural texture compression (NTC) stores a material’s textures as a small table of learned features and a decoder
+        network. These features and network weights are commonly kept in 16-bit floating point. We propose quantizing both
+        with modern block scaling schemes such as microscaling (MX) formats. We will implement the system in a real-time
+        renderer and evaluate it on the full Bistro scene, measuring texture memory, image quality after filtering and
+        shading, and frame time across bit widths. We contribute a quantization scheme and quantization-aware training
+        procedure that reduces the bits per stored value while keeping high quality images, and efficiently mapping the
+        decoder to Tensor Core matrix hardware. We use a 16-bit system as our baseline.
+      </p>
+    </section>
+
+    <section id="problem">
+      <h2>Problem description</h2>
+      <p>
+        Textures account for a large part of GPU memory in rendering due to their large memory footprint. Neural texture
+        compression addresses this issue by representing a material's textures with a small table of learned values and a
+        small decoder network that reconstructs texel values per pixel at render time. NVIDIA reports that a 2048 by 2048
+        material with eight channels occupies 12 MB in conventional block-compressed formats and 2.5 MB in the neural
+        format when decoded per sample (NVIDIA 2026). However, due to the increase in computation required per pixel,
+        neural texture compression can reduce rendering performance by 20 to 30 percent (Panteleev 2025). Our work targets
+        both sides; block scaled formats reduce the bits per stored value, while leveraging the high compute throughput of
+        low-precision tensor core instructions in modern GPUs.
+      </p>
+      <p>
+        Recent work runs texture decoding on GPU matrix hardware (Belcour and Benyoub at Intel 2025), storing features as
+        8-bit integers with quantization-aware training (Fuijeda and Harada 2024) . Their system uses a fixed format for
+        the learned features, and keeps the decoder in 16-bit floating point. To our knowledge, no prior system uses
+        block-scale formats, variable bit-width, or decoder weight quantization. We aim to build upon this work and study
+        the numerical representation of both learned features and decoder weights. Reducing the number of bits per stored
+        value lowers memory usage, and we expect it to do so without significantly sacrificing image quality.
+      </p>
+      <p>
+        We will study the numerical representation of the learned values and decoder weights. Many existing quantization
+        schemes use a fixed format for learned values and retain the decoder in 16-bit floating point. Our review has not
+        identified a system that uses shared-scale block formats, varies the bit width, or quantizes decoder weights. By
+        reducing the number of bits per stored value, we can reduce memory usage without significantly sacrificing image
+        quality.
+      </p>
+      <p>
+        Lowering precision creates three challenges. First, at 4 or 6 bits per value, quality might suffer, so we must
+        train with quantization in the loop to keep images accurate. Second, texture hardware cannot filter block scaled
+        values, so our decoder must filter them. Third, the full scene must render in real time, which requires the data
+        layout to match the GPU arithmetic units. We will evaluate all three in real time on a full scene.
+      </p>
+
+      <h3>Research questions</h3>
+      <p>The evaluation will address the following questions:</p>
+      <ol>
+        <li>At equal memory usage, does block-scaled quantization of the learned table provide higher quality than uniform quantization or BC1 storage?</li>
+        <li>What is the minimum bit width before errors become visible after shading?</li>
+        <li>How does 8-bit integer quantization of the decoder affect quality and decoding time?</li>
+        <li>What is the best decoder update granularity when rendering scenes in real-time?</li>
+      </ol>
+    </section>
+
+    <section id="goals">
+      <h2>Goals and deliverables</h2>
+      <p>
+        Our deliverables include a quantized compression system, a real-time renderer that uses it on a full scene, and an
+        evaluation of block-scaled quantization against the non-quantized baseline at equal memory usage.
+      </p>
+      <p>
+        We will implement the compressor and decoder. The compressor will train the learned table and decoder while
+        simulating each format's rounding behavior. The decoder will reconstruct values using each block's shared scale
+        and evaluate the network on NVIDIA Tensor Cores, using matrix operations with a width of 16 values. The
+        quantization scheme will support four block-scaled formats from the Open Compute Project's microscaling
+        specification: MXINT8 and MXFP8, MXFP6, and MXFP4, and one NVIDIA proprietary format: NVFP4. As baselines, we will implement two quantization schemes
+        and compare them at equal memory usage. The first uses uniform quantization at 8 and 4 bits, with one scale per
+        table. The second stores values in BC1 format, following Belcour and Benyoub, to support texture hardware
+        filtering.
+      </p>
+      <p>
+        The CUDA decoder will reconstruct each block, evaluate the network using Tensor Core instructions in 16-bit
+        floating point or 8-bit integer arithmetic, and output material values for shading. We will integrate it into a
+        real-time renderer, with all textures compressed by our system. The renderer will select a suitable level of detail
+        per pixel and filter across neighboring values.
+      </p>
+      <p>
+        The results will include a comparison of the original textures for each format with analysis of memory usage and
+        frame time as the format changes.
+      </p>
+
+      <h3>Stretch goals</h3>
+      <p>
+        Our stretch goals include four extensions: a decoder that returns four neighboring texture values in one
+        evaluation, subject to an initial literature review confirming its novelty; automatic bit allocation that assigns
+        fewer bits to texture channels that tolerate more error; measurements on a second GPU, preferably one with reported
+        native Tensor Core support for 4-bit and 6-bit formats; and release of the evaluation scripts as an open benchmark
+        for small networks evaluated per pixel, a workload not covered by SPECviewperf 15, 3DMark or LumiBench.
+      </p>
+
+      <h3>Evaluation metrics</h3>
+      <table class="metrics">
+        <thead>
+          <tr><th>Measurement</th><th>Unit</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Texture memory</td><td>bytes per material</td></tr>
+          <tr><td>Image quality relative to original textures</td><td>peak signal-to-noise ratio (PSNR) in dB</td></tr>
+          <tr><td>Quality at equal memory usage</td><td>PSNR difference from the BC1 baseline, in dB</td></tr>
+          <tr><td>Error after filtering and shading</td><td>PSNR of rendered frames relative to the uncompressed scene</td></tr>
+          <tr><td>Bistro frame time at 1920x1080 pixels</td><td>milliseconds</td></tr>
+          <tr><td>Decoding time</td><td>microseconds per million pixels</td></tr>
+          <tr><td>Quality loss with a shared decoder</td><td>PSNR loss relative to per-material decoders, in decibels</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Feasibility and risks</h3>
+      <p>
+        Our team has experience with microscaling formats. Training requires fitting a small model to each material, and
+        prior work provides a tested baseline and renderer design. We expect decoder quantization to have a limited effect
+        on decoding time because prior work reports nearly constant decoding time across network widths when using matrix
+        hardware. The main expected benefit is reduced memory usage. If the full-scene renderer is delayed, we will demonstrate the system on the smaller FlightHelmet model.
+      </p>
+    </section>
+
+    <section id="schedule">
+      <h2>Proposed schedule</h2>
+      <ul>
+        <li>
+          <strong>Week 1 (11/15-11/22, milestone due):</strong> Implement the compressor with uniform and microscaling
+          quantizers and QAT. Fit three test materials and produce the first figure of quality against bits with
+          side-by-side images. Start the Tensor Core decoder and decode one material on the GPU. Load the Bistro scene
+          with its original textures in an initial renderer framework. Prepare milestone materials.
+        </li>
+        <li>
+          <strong>Week 2 (11/22-11/29):</strong> Finish the decoder for every format and connect it to the renderer. Each
+          scene should use one shared decoder. Compress every Bistro material. Add per-pixel texture resolution selection
+          and filtering to the decoder. Add the BC1 baseline. Render Bistro in real time with our textures.
+        </li>
+        <li>
+          <strong>Week 3 (11/29-12/6, paper due):</strong> Data collection and evaluation: add the BC1 baseline, the 8-bit
+          integer decoder, and the shared decoder. Run every format on every material. Produce final figures and
+          split-screen demo. Prepare final paper and video.
+        </li>
+        <li>
+          <strong>Week 4 (presentation week):</strong> Prepare and deliver the presentation with a live demo.
+        </li>
+      </ul>
+    </section>
+
+    <section id="resources">
+      <h2>Resources</h2>
+      <p>
+        The project requires one NVIDIA RTX GPU with Tensor Cores; the model remains to be specified. A second GPU is
+        needed only for the stretch goals. We will implement the decoder in CUDA and the compressor in PyTorch. The
+        open-source <a href="https://github.com/NVlabs/tiny-cuda-nn">tiny-cuda-nn</a> library will serve as a reference
+        for the decoder implementation.
+      </p>
+      <p>
+        We will use material texture sets from Poly Haven and ambientCG, the FlightHelmet model, and the Bistro scene,
+        following prior work. We will compare the scope of our evaluation with SPECviewperf 15, 3DMark and LumiBench.
+      </p>
+
+      <h3>References</h3>
+      <ul>
+        <li>Hardware Accelerated Neural Block Texture Compression with Cooperative Vectors, Belcour and Benyoub, HPG 2025: baseline method</li>
+        <li><a href="https://research.nvidia.com/labs/rtr/neural_texture_compression/">Random-Access Neural Compression of Material Textures</a>, SIGGRAPH 2023: the original method</li>
+        <li><a href="https://arxiv.org/abs/2310.10537">Microscaling Data Formats for Deep Learning</a>: definitions of the four formats</li>
+        <li>Collaborative Texture Filtering, HPG 2025: filtering when stored values cannot be filtered in hardware</li>
+        <li>Thread-Efficient Decoding for Neural Texture Compression, 2026 preprint: review for potential overlap</li>
+        <li>Neural Texture Compression using Hypernetworks, 2026 preprint: review for overlap with the shared decoder</li>
+        <li><a href="https://docs.nvidia.com/cuda/turing-tuning-guide/">Tuning CUDA Applications for Turing</a>: the matrix sizes and number formats Tensor Cores accept</li>
+        <li>RTX Neural Texture Compression (NTC) SDK, NVIDIA, v0.10.0 beta, README section “Example Compression Rates”: source of the 12 MB and 2.5 MB example</li>
+        <li>Practical Neural Texture Compression, Alexey Panteleev (NVIDIA), Vulkanised 2025, slide 19: source of the 20 to 30 percent frame-performance estimate</li>
+        <li><a href="https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf">OCP Microscaling Formats (MX) Specification, Version 1.0</a>, Open Compute Project, September 2023: defines MXINT8, MXFP8, MXFP6 and MXFP4</li>
+        <li><a href="https://arxiv.org/abs/2509.25149">Pretraining Large Language Models with NVFP4</a>, NVIDIA, arXiv 2509.25149, September 2025: defines NVFP4 and compares it with MXFP4</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -61,6 +61,15 @@ slides and video (placeholders: `\todo{URL}`). Four parts, as the course asks:
 | 6 Limitations and lessons | scale selection during training fails; QAT oscillation; flat-plane shading model; one GPU | — |
 | 7 Conclusion | | |
 
+Audience: the reviewers are graphics people, not hardware or ML-compression
+people. Define on first use, in one plain sentence each: block scaling (a group
+of values shares one scale), NVFP4/MXFP4, Tensor Core, MMA, QAT and **fake
+quantization** (training with the rounding simulated: the forward pass rounds
+values to what the format can store but keeps them as floats, the backward pass
+treats rounding as the identity; real 4-bit packing happens only at export),
+and straight-through estimator. Prefer "rounded to the nearest representable
+value" over "quantized" when the point is the image, not the arithmetic.
+
 Course rules the text must satisfy: say clearly what we started from (PyTorch,
 NVIDIA FLIP evaluator, Poly Haven CC0 textures, Bistro scene) versus what we
 built (compressor, quantizers, shading loss, decoder kernels, experiments);
