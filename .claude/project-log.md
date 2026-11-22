@@ -422,3 +422,45 @@ flowchart LR
 
 - [ ] Overlap the next tile's latent fetches with the current MMAs; fewer registers
 - [ ] MXFP4 latents + FP8 weights to recover quality lost to NVFP4 weights
+
+### 2026-11-22 · Paper restructured: problem → contribution → techniques
+
+> Abstract, intro and milestone now state the problem, FP4-direct decoding as the answer, and its three techniques; v2 timing and 48-model rounding are in; diagrams use the slide palette.
+
+#### Before
+
+```mermaid
+flowchart LR
+  P1["intro<br/>drawbacks, then study"] --> PAP["paper/<br/>main + milestone"]
+  RES[("results/<br/>v1, interim rounding")] --> PAP
+  FIG["diagrams<br/>black outlines"] --> PAP
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  P1["intro<br/>problem → FP4-direct →<br/>layout, filter, rounding"] --> PAP["paper/<br/>main + milestone"]
+  RES[("results/<br/>v2 timing, 48-model rounding")] --> PAP
+  FIG["diagrams<br/>pptx palette + callouts"] --> PAP
+  TR["training diagram"] --> PAP
+```
+
+#### Decisions
+
+- **One story: rendering-aware rounding is a technique of FP4-direct decoding, not a separate result.** The decoder uses codes as stored, so rounding is where quality is decided.
+- **Headline speed is 1.21× over our own fused FP16 kernel; 18.6× over compiled PyTorch is credited to fusion.** Matches the GPU session's guidance.
+- **4-texel model cost is +2.4 % FLIP (computed from `concat4-pilot/results.json`), not +2.3 %.**
+
+#### Results
+
+| metric | value |
+|---|---|
+| main.pdf | 6 pages incl. references |
+| milestone.pdf | 3 pages incl. references |
+| open `\todo` in main.tex | Bistro, BC baseline, rounding on FP4-ready model, optimizer details, teaser, related-work 2026 |
+
+#### Open
+
+- [ ] Push paper commit efa1fc3 to Overleaf
+- [ ] Milestone links (webpage, slides, video) before 23:59 PT tonight
