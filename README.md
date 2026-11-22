@@ -39,5 +39,8 @@ pixi run figures out/milestone --out <plots dir>
 Each run writes `out/<sweep>/<material>/<grid>/<loss>/<format>/metrics.json`
 plus image crops; finished runs are skipped, so sweeps resume.
 
+The renderer builds nvdiffrast from source on `pixi install`. That needs a visible GPU (the CUDA
+architecture is detected) or `TORCH_CUDA_ARCH_LIST=12.0a pixi install` on a machine without one.
+
 Bistro (for the renderer): download `Bistro_v5_2.zip` from <https://developer.nvidia.com/bistro> (CC BY 4.0), unzip into
 `data/bistro-orca/`, then `pixi run python tools/render_bistro.py --scene BistroInterior --ambient 0.3`.

@@ -50,16 +50,19 @@ Consequences:
   are trained on that. The paper must say so.
 - **The BC baseline already exists in the scene.** Bistro ships BaseColor BC1 (4 bits) or BC3
   (8 bits) + Normal BC5 (8 bits) + a mostly 16² Specular map. Per full-resolution texel that
-  is 12 bits for opaque materials and 16 for those with alpha, because the ARM map is
-  negligible; it is not the log's "BC1+BC5+BC1 = 16" (which assumes a full-size BC1 ARM map).
+  is 12 bits where the base colour is BC1 (142 of 203 sets) and 16 where it is BC3 (61 sets;
+  only 4 interior and 12 exterior materials actually use their alpha). The ARM map is
+  negligible. This is not the log's "BC1+BC5+BC1 = 16", which assumes a full-size BC1 ARM map.
   Compare at equal bytes per material, not equal bits per texel.
 - **The ARM map is nearly constant.** 198 of 201 specular maps are 16², so for almost all
   materials AO/roughness/metalness carry little detail and the memory is in albedo and normals
   (normals alone are 907 MiB of the 1,392). Training them as full-resolution neural channels
   spends bits on nothing; decide between upsampling them (simple) and storing per-material
   constants.
-- **The normal map is DirectX.** `textures.py` flips green and rebuilds z so it matches
-  `sixteen/data.py` (OpenGL).
+- **The normal map is DirectX** (README, and measured). `textures.py` flips green and rebuilds z
+  so it matches `sixteen/data.py` (OpenGL). `tools/check_normal_convention.py` confirms the
+  flip: against the albedo gradient, the normal's y agrees in sign with x in 42 of 48
+  textures after flipping, 6 without.
 - Three maps of a set usually have different resolutions (198 of 201 complete sets), so the
   renderer keeps each map at its native size and the compressor will have to resample to one.
 

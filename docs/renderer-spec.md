@@ -88,8 +88,9 @@ use the same filter, so each comparison names its reference (D5).
   `no-build-isolation` and the CUDA dev libraries in `pixi.toml`. It rasterizes 1080p
   headless; a test triangle covered exactly the expected 1/8 of the screen with the
   expected uv derivatives. It handles Bistro's 1.0 M (interior) and 2.8 M (exterior)
-  triangles at 4–14 ms per frame on a busy GPU. The software-rasterizer fallback is not
-  needed.
+  triangles at 4–14 ms per frame on a busy GPU. Its documentation states no resolution or
+  triangle limit for the CUDA context; only 1920×1080 with up to 2.8 M triangles has been
+  tried. The software-rasterizer fallback is not needed.
 - **Rejected:** a standalone Vulkan/OpenGL app with CUDA interop. It needs a
   display, a window system and interop code, and none of that is the contribution.
 
@@ -156,7 +157,9 @@ point samples, so comparing a converged STF render against `original` would meas
 the filter, not the compression. FLIP for neural sources is always against
 `original-stf`, accumulated over many frames. Measured on the interior (§11), a
 64-frame trilinear render sits at FLIP 0.0155 from a converged STF render, as large
-as the STF noise of a 4–16 frame average, so the distinction is not academic.
+as the STF noise of a 4–16 frame average. That gap also includes isotropic LOD selection and mips averaged
+in sRGB space, so it is an upper bound on the effect of filter order alone; it shows the distinction matters,
+not by how much.
 
 **Which model variant "compress all materials" trains** (bilinear or `concat4`)
 depends on the `concat4` pilot. Its outputs (`out/concat4-pilot`) are not in this
@@ -289,7 +292,7 @@ per-pixel GGX using `sixteen.shading.ggx_radiance` (`shade.py`), jittered accumu
 (`renderer.py`), and CLIs `tools/render_bistro.py` (PNG), `tools/renderer_check.py`
 (measurements), `tools/bistro_inventory.py`.
 
-**Verified** (`python/tests/test_renderer.py`, 14 tests, plus 6 existing; run with `pixi run test`):
+**Verified** (`python/tests/test_renderer.py`, 15 tests, plus 6 existing and 3 that need a GPU decoder checkpoint; run with `pixi run test`):
 
 | claim | how |
 |---|---|
@@ -299,10 +302,11 @@ per-pixel GGX using `sixteen.shading.ggx_radiance` (`shade.py`), jittered accumu
 | mean of stochastic taps equals bilinear interpolation | 2048 frames at 512 points, max error < 0.03 |
 | STF seeds equal the CUDA decoder's | compared with `decoder.pixel_seeds` |
 | uv re-basing preserves uv mod 1 | integer-shift check |
+| DirectX → OpenGL normal conversion (green flipped, z rebuilt) | unit test; and `tools/check_normal_convention.py`: after the flip, the normal's y agrees in sign with x against the albedo gradient in 42 of 48 textures (6 if unflipped). A visual A/B was inconclusive and is not evidence |
 | Bistro interior has 1,046,609 triangles, 71 materials, all textures present | README count |
 | TAA reprojection follows camera motion; with jitter it converges to the pixel mean | measured 2e-7 error on smooth signal; 0.011 vs 0.21 (jittered-hit variant) and 0.24 (one frame) |
 
-The tests were mutation-checked: removing the v flip, flipping the bitangent handedness or
+The tests were mutation-checked (the texture conversion in `textures.py` was added to the tests afterwards and is covered by the normal test, not by this run): removing the v flip, flipping the bitangent handedness or
 jitter sign, changing the STF hash, swapping trilinear weights, or scaling the normal each makes
 a test fail. Writing the TAA test exposed a real bug (reprojecting the jittered hit blurred the
 history); it is fixed and has a regression test.
@@ -332,6 +336,9 @@ interior, static camera:
 The error falls about 6 dB per 4× frames, as unbiased noise should. TAA with the neighbourhood
 clamp is worth roughly 8 averaged frames.
 
+The committed preview JPEGs use `--ambient 0.3` so the interior is visible; the measurements above used
+the default 0.03 (`shading` in the JSON). Compare images only at one setting.
+
 **What these numbers are not.** They say nothing about neural textures: no neural source exists
 yet. The frame times are for the original-texture path on a shared GPU, not the paper's
 headline timing. Everything runs in PyTorch with per-stage synchronization; the shipping path
@@ -341,6 +348,10 @@ is the CUDA decoder.
 emissive maps are ignored; no shadows, so interiors are dark under one sun (`--ambient` raises
 the constant sky term for viewing, but comparisons must use one value); the exterior camera
 preset sits under a canopy; only a two-camera lerp exists as a path; no video output.
+
+**Planned checks that have not run yet:** binned multi-material decode against unsorted decode;
+`neural-ref` against `original-stf` (no neural source exists); any timing on an idle GPU; TAA under camera motion on
+Bistro itself (it is only tested on a synthetic smooth signal).
 
 Reproduce: `pixi run python tools/render_bistro.py --scene BistroInterior --ambient 0.3` and
 `pixi run python tools/renderer_check.py` (first run imports the FBX, 25–90 s, then caches).

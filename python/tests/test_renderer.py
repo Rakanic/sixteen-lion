@@ -292,3 +292,17 @@ def test_taa_with_jitter_converges_to_the_pixel_footprint_mean():
     single = (sig(frames[-1]) - mean).abs().amax(-1)[valid].mean().item()
     assert single > 0.15  # the signal really is noisy per frame
     assert err < 0.03, err
+
+
+def test_dx_normal_decode_flips_green_and_rebuilds_z():
+    """Bistro normals are DirectX BC5 (x, y; green points down). sixteen.data wants OpenGL (green up), n * 0.5 + 0.5."""
+    from sixteen.render.textures import decode_normal_dx_bc5
+
+    flat = decode_normal_dx_bc5(np.full((2, 2, 3), 128, np.uint8))
+    assert torch.allclose(flat.reshape(-1, 3)[0], torch.tensor([0.502, 0.502, 1.0]), atol=0.01)  # +z
+    px = np.full((1, 1, 3), 128, np.uint8)
+    px[..., 0], px[..., 1] = 200, 200  # DirectX: +x, and +y meaning "down"
+    n = decode_normal_dx_bc5(px)[0, 0] * 2 - 1
+    assert n[0] > 0.4  # x unchanged
+    assert n[1] < -0.4  # green flipped: DirectX +y (down) becomes OpenGL -y
+    assert n[2] > 0 and abs(n.norm().item() - 1) < 1e-4

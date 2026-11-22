@@ -66,7 +66,10 @@ def main():
     r = Renderer(scene)
     atlas = TextureAtlas(r.store)
     tri, stf = AtlasSource(atlas, "trilinear"), AtlasSource(atlas, "stf")
-    res = {"scene": args.scene, "camera": args.camera, "size": [W, H], "triangles": len(scene.tri), "materials": len(scene.materials),
+    from sixteen.render.shade import SUN
+    from sixteen.shading import AMBIENT
+
+    res = {"shading": {"ambient": AMBIENT, "sun": list(SUN), "intensity": 3.0}, "scene": args.scene, "camera": args.camera, "size": [W, H], "triangles": len(scene.tri), "materials": len(scene.materials),
            "atlas_mib": atlas.nbytes() / 2**20, "gpu_util_at_start": util, "torch": torch.__version__}
 
     # --- timing along a short camera path (A -> B), per stage, after warm-up

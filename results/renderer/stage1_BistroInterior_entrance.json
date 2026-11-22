@@ -79,5 +79,15 @@
  "taa_64_frames_vs_converged_stf": {
   "flip": 0.012083364650607109,
   "psnr": 41.0789680480957
+ },
+ "shading": {
+  "ambient": 0.03,
+  "sun": [
+   0.35,
+   0.85,
+   0.4
+  ],
+  "intensity": 3.0,
+  "note": "defaults in effect for this run, added afterwards; the preview JPEGs in this directory use ambient 0.3 for visibility"
  }
 }
