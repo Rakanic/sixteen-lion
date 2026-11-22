@@ -46,3 +46,20 @@ def test_kernel_matches_reference(dec):
         ref32 = dec.reference(uv, frame)
         assert (out - ref16).abs().max().item() < 2e-2  # same taps, fp16 math in both
         assert (out - ref32).abs().mean().item() < 2e-3
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_v2_both_paths_match_reference():
+    from sixteen.decoder import CudaDecoderV2
+    from sixteen.model import NeuralTexture
+
+    torch.manual_seed(0)
+    m = NeuralTexture((2048, 2048), 9, filter="concat4", w1_fmt="nvfp4")
+    with torch.no_grad():
+        for g in m.latents:
+            g.normal_(0, 0.7)
+    dec = CudaDecoderV2(m, (2048, 2048))
+    uv = torch.rand(1 << 18, 2, device="cuda")
+    ref = dec.reference(uv, 5)
+    for fp4 in (False, True):
+        assert (dec(uv, 5, fp4=fp4) - ref).abs().max().item() < 1e-3

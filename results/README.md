@@ -67,9 +67,23 @@ and vs the same number of extra QAT steps).
 
 **Meaning.** A free, post-training improvement that beats texel-aware
 rounding on every material. It is AdaRound with a rendering loss, so it is a
-**supporting technique, not the headline**. Robustness check running
-(`configs/rounding-base.yaml`: 6 materials, 2 seeds, both 4-bit formats,
-unseen lighting); results will land in `rounding/`.
+**supporting technique, not the headline**.
+
+**Robustness** (`rounding/`, `configs/rounding-base.yaml`: 6 materials x 2 seeds x
+MXFP4/NVFP4 x texel/shading training = 48 models, scored under the test lights
+and under unseen lighting: 64-light sky, 4x brighter light, Blinn-Phong BRDF):
+
+| | result |
+|---|---|
+| beats round-to-nearest and texel-aware rounding | **48/48** models, test and unseen lighting |
+| mean FLIP change, rendering-aware rounding | −7.0 to −8.1 % (unseen lighting: −7.1 to −8.2 %) |
+| mean FLIP change, texel-aware rounding | −2.6 to −3.1 % |
+| per material | −2.3 % (rusty_metal_02) to −12.5 % (denim_fabric) |
+| seed agreement | median gap 0.35 points (max 4.8, denim NVFP4: −11.5 vs −16.3 %) |
+| equivalent memory (estimate, milestone curves) | ≈ 24 % (MXFP4) / 20 % (NVFP4) more latents at plain rounding |
+
+It also works on models trained with the plain texel loss (−7.4 to −8.1 %),
+so it is a drop-in step for existing neural textures.
 
 ## 7. CUDA decoder v1 → `decoder/`
 

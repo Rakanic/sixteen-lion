@@ -177,3 +177,136 @@ class CudaDecoder:
         if half:
             return copy.deepcopy(self.model.mlp).half()(x.half()).float()
         return self.model.mlp(x)
+
+
+# ================================================================ v2: concat4 model, FP4-direct layer 1
+
+
+@functools.lru_cache(maxsize=None)
+def _ext_v2():
+    from torch.utils.cpp_extension import load
+
+    d = ROOT / "out" / "build" / "ntc_decode_v2"
+    d.mkdir(parents=True, exist_ok=True)
+    return load(
+        name="ntc_decode_v2",
+        sources=[str(ROOT / "cuda" / "ntc_decode_v2.cu")],
+        extra_cflags=["-O3", "-std=c++20"],
+        extra_cuda_cflags=["-O3", "-std=c++20", "-gencode=arch=compute_120a,code=sm_120a", "--use_fast_math"],
+        build_directory=str(d),
+        verbose=False,
+    )
+
+
+def nvfp4_rows(x):
+    """NVFP4 of a 2-D tensor, blocks of 16 along each row, mirroring nvfp4_quant.
+
+    Returns (codes [R, C] int64 E2M1 codes, scales [R, C/16] E4M3 values,
+    gscale (0-dim tensor), dequantized [R, C]).
+    """
+    R, C = x.shape
+    b = x.reshape(-1, 16).float()
+    gscale_t = b.abs().amax().clamp(min=1e-12) / (E2M1.max * E4M3.max)
+    s = round_minifloat(b.abs().amax(1, keepdim=True) / E2M1.max / gscale_t, E4M3)
+    bscale_q = s * gscale_t
+    keep = bscale_q > 0
+    bscale_q = torch.where(keep, bscale_q, torch.ones_like(bscale_q))
+    s = torch.where(keep, s, torch.ones_like(s) / gscale_t)
+    v = round_minifloat(b / bscale_q, E2M1)
+    mag = (v.abs()[..., None] == E2M1_MAG.to(v.device)).float().argmax(-1)
+    codes = mag | ((v < 0).long() << 3)
+    return codes.view(R, C), s.view(R, C // 16), gscale_t, (v * bscale_q).view(R, C)
+
+
+def frag_fp16(Wkn):
+    """[K, N] weights (K, N multiples of 16, 8) -> FP16 B fragments as int32, order (k-tile, n-tile, lane, 2 words)."""
+    K, N = Wkn.shape
+    lane = torch.arange(32)
+    gq, tq = lane // 4, lane % 4
+    Wh = Wkn.half().cpu()
+    frags = []
+    for k in range(K // 16):
+        for n in range(N // 8):
+            rows = [k * 16 + tq * 2 + o for o in (0, 1, 8, 9)]
+            frags.append(torch.stack([Wh[r, n * 8 + gq] for r in rows], dim=1))
+    return torch.stack(frags).contiguous().view(torch.int32).view(-1)
+
+
+class CudaDecoderV2:
+    """Decoder for concat4 models with NVFP4 layer-1 weights (train with filter="concat4", w1_fmt="nvfp4")."""
+
+    def __init__(self, model: NeuralTexture, res, device="cuda"):
+        assert model.filter == "concat4" and model.w1_fmt == "nvfp4", "needs a concat4 model with w1_fmt='nvfp4'"
+        lin = [m for m in model.mlp if isinstance(m, torch.nn.Linear)]
+        assert [l.in_features for l in lin] == [140, 64, 64] and [l.out_features for l in lin] == [64, 64, 9]
+        self.model = model.to(device).eval()
+        self.H, self.W = res
+        self.grids = []
+        for g in model.latents:
+            h, w, c = g.shape
+            codes, s, gs, deq = nvfp4_rows(g.detach().to(device).reshape(-1, 16))
+            packed = (codes[:, 0::2] | (codes[:, 1::2] << 4)).to(torch.uint8).contiguous().view(-1)
+            scales = s.view(-1).to(torch.float8_e4m3fn).view(torch.uint8).contiguous()
+            self.grids.append(dict(codes=packed, scales=scales, gscale=gs.item(), w=w, h=h, deq=deq.view(h, w, c)))
+        # layer 1, latent part: [64 out, 128 in] NVFP4 along the input
+        W1 = lin[0].weight.detach().float().to(device)
+        wc, ws, wgs, wdeq = nvfp4_rows(W1[:, :128].contiguous())
+        lane = torch.arange(32, device=device)
+        gq, tq = lane // 4, lane % 4
+        fp4, sf = [], []
+        for k in range(2):
+            for n in range(8):
+                row = n * 8 + gq  # output neuron = MMA column
+                regs = []
+                for j in range(2):
+                    cols = k * 64 + 32 * j + tq * 8  # first K index of this register
+                    word = torch.zeros(32, dtype=torch.int64, device=device)
+                    for i in range(8):
+                        word |= wc[row, cols + i] << (4 * i)
+                    regs.append(word)
+                fp4.append(torch.stack(regs, dim=1))
+                sbytes = ws[row][:, k * 4 : k * 4 + 4].to(torch.float8_e4m3fn).view(torch.uint8).long()
+                sf.append(sbytes[:, 0] | (sbytes[:, 1] << 8) | (sbytes[:, 2] << 16) | (sbytes[:, 3] << 24))
+        to_i32 = lambda t: (t & 0xFFFFFFFF).to(torch.int64).where(t < 2**31, t - 2**32).to(torch.int32)
+        self.w1_fp4 = to_i32(torch.stack(fp4)).contiguous().view(-1)
+        self.w1_sf = to_i32(torch.stack(sf)).contiguous().view(-1)
+        self.w1_fp16 = frag_fp16(wdeq.T.contiguous()).to(device)  # dequantized, gscale folded in
+        pe = torch.zeros(16, 64)
+        pe[:12] = W1[:, 128:140].T.cpu()
+        self.w1_pe = frag_fp16(pe).to(device)
+        W2, W3 = lin[1].weight.detach().float().T.cpu(), torch.zeros(64, 16)
+        W3[:, :9] = lin[2].weight.detach().float().T.cpu()
+        self.w23 = torch.cat([frag_fp16(W2), frag_fp16(W3)]).to(device)
+        b3 = torch.zeros(16)
+        b3[:9] = lin[2].bias.detach().float().cpu()
+        self.bias = torch.cat([lin[0].bias.detach().float().cpu(), lin[1].bias.detach().float().cpu(), b3]).to(device)
+        self.k = [g["gscale"] * wgs.item() for g in self.grids]
+        self.blocks = torch.cuda.get_device_properties(device).multi_processor_count * 4
+
+    @classmethod
+    def from_checkpoint(cls, path, device="cuda"):
+        ck = torch.load(path, weights_only=False, map_location="cpu")
+        cfg = ck["cfg"]
+        H = W = {"1k": 1024, "2k": 2048, "4k": 4096}[cfg["res"]]
+        model = NeuralTexture((H, W), 9, grids=[tuple(g) for g in ck["grids"]], hidden=cfg["hidden"],
+                              layers=cfg["layers"], filter=cfg.get("filter", "bilinear"), w1_fmt=cfg.get("w1_fmt"))
+        model.load_state_dict(ck["state"])
+        return cls(model, (H, W), device)
+
+    def __call__(self, uv, frame=0, fp4=True):
+        g0, g1 = self.grids
+        return _ext_v2().decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
+                                g1["codes"], g1["scales"], g1["gscale"], g1["w"], g1["h"],
+                                self.W, self.H, uv.contiguous(), int(frame), self.w1_fp4, self.w1_sf, self.w1_fp16,
+                                self.w1_pe, self.w23, self.bias, self.k[0], self.k[1], bool(fp4), self.blocks)
+
+    def stf_centers(self, uv, frame=0):
+        """Texel centers picked by the kernel's output-space STF (bit-exact)."""
+        s0, _ = pixel_seeds(uv.shape[0], frame, uv.device)
+        t = stf_texels(uv, self.W, self.H, s0)
+        return torch.stack([(t % self.W + 0.5) / self.W, (t // self.W + 0.5) / self.H], dim=-1)
+
+    @torch.no_grad()
+    def reference(self, uv, frame=0):
+        """The PyTorch model (quantized latents and weights, fp32 math) at the same texel centers."""
+        return self.model(self.stf_centers(uv, frame), [g["deq"] for g in self.grids])

@@ -62,11 +62,20 @@ def bilinear_wrap(grid, uv):
 
 
 class NeuralTexture(nn.Module):
-    def __init__(self, res, out_channels, grids=((4, 16), (8, 16)), hidden=64, layers=2, pe_freqs=2, filter="bilinear"):
-        """`grids` lists (downsample factor, channels) per latent grid; `res` is (H, W)."""
+    def __init__(self, res, out_channels, grids=((4, 16), (8, 16)), hidden=64, layers=2, pe_freqs=2, filter="bilinear",
+                 w1_fmt=None):
+        """`grids` lists (downsample factor, channels) per latent grid; `res` is (H, W).
+
+        `w1_fmt` fake-quantizes the first layer's latent weights (QAT), e.g.
+        "nvfp4": the FP4 block-scaled MMA needs both operands in FP4. Blocks of
+        16 run along the input dimension, so one weight block meets one latent
+        texel. Only with filter="concat4".
+        """
         super().__init__()
         assert filter in ("bilinear", "concat4")
+        assert w1_fmt is None or filter == "concat4"
         self.filter = filter
+        self.w1_fmt = w1_fmt
         H, W = res
         self.grid_shapes = [(H // s, W // s, c) for s, c in grids]
         self.latents = nn.ParameterList(
@@ -75,6 +84,7 @@ class NeuralTexture(nn.Module):
         self.fine_res = torch.tensor([self.grid_shapes[0][1], self.grid_shapes[0][0]], dtype=torch.float32)
         self.pe_freqs = pe_freqs
         n_lat = sum(c for *_, c in self.grid_shapes) * (4 if filter == "concat4" else 1)
+        self.n_lat = n_lat
         n_frac = 2 * len(self.grid_shapes) if filter == "concat4" else 0
         dims = [n_lat + 4 * pe_freqs + n_frac] + [hidden] * layers + [out_channels]
         mods = []
@@ -106,7 +116,12 @@ class NeuralTexture(nn.Module):
         else:
             taps, fracs = zip(*[neighbours4_wrap(g, uv) for g in latents])
             feats = list(taps) + [self.encode_pos(uv)] + list(fracs)
-        return self.mlp(torch.cat(feats, dim=-1))
+        x = torch.cat(feats, dim=-1)
+        if self.w1_fmt is None:
+            return self.mlp(x)
+        lin = self.mlp[0]
+        w = torch.cat([fake_quant(lin.weight[:, : self.n_lat], self.w1_fmt), lin.weight[:, self.n_lat :]], dim=1)
+        return self.mlp[1:](torch.nn.functional.linear(x, w, lin.bias))
 
     @torch.no_grad()
     def decode_image(self, H, W, fmt=None, chunk=1 << 20):
