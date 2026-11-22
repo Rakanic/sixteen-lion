@@ -379,9 +379,37 @@ Both frames use identical camera, jitter and tap seeds, so the difference is com
 
 Per material texel PSNR runs from 32.6 dB (`MASTER_Interior_01_Plaster`, noisy texture) to 63.2 dB (`Plates_Ceramic`); see
 `results/renderer/neural-compare/neural_compare.json`. Videos in the same folder: `wipe_original_vs_neural.mp4`
-and `neural_vs_decoder_v1.mp4` (120 frames, 1280×720, TAA).
+and `neural_vs_decoder_v1.mp4` (120 frames, 1280×720, TAA). This section is the bilinear-model, PyTorch-decode run; the
+decoder-v2 run below supersedes it as the headline.
 
 **Caveats.** (1) This is the PyTorch decode of bilinear-model NVFP4 fits, not the CUDA kernel and not the
 `concat4`/C1 configuration. (2) The reference is decoded BC data, so the claim is "FLIP X at Y× fewer bytes",
 not "beats BC at equal memory"; BC bytes are counted for the same materials. (3) Decoder v1 (CUDA) taps in latent space
 and is about 20 dB off the correct decode; the second video shows that. (4) Shared GPUs, so no timings here.
+
+### Decoder v2 in the renderer (after merging main's v2, 2026-11-22)
+
+`render/neural_ref.py` gained `MixedSourceV2`, which runs `CudaDecoderV2` (FP4-direct layer 1, output-space
+stochastic filtering). The decoder's seeds come from the pixel's index in the batch, so each material's uvs are scattered
+into a full-frame buffer and the whole frame is decoded per material (about 0.3 ms at 1080p); the seeds then equal the
+screen pixel index and the taps match `AtlasSource(..., "stf")` exactly. Test:
+`test_decoder_v2_source_uses_screen_pixel_seeds`. The same ten materials were refitted as concat4 with NVFP4
+layer-1 weights (`configs/bistro-v2.yaml`, 20000 steps, shading loss; v2 needs this model). Outputs in
+`results/renderer/neural-compare-v2/` (`tools/bistro_compare.py --fit out/bistro-v2`, `tools/bistro_videos.py`).
+
+| interior entrance, 32 frames, ambient 0.3 | decoder v2 (concat4, NVFP4 weights) | bilinear fits, PyTorch decode |
+|---|---|---|
+| FLIP, neural pixels | 0.0064 | 0.0046 |
+| FLIP, whole frame | 0.0140 | 0.0097 |
+| PSNR, neural pixels | 51.5 dB | 53.7 dB |
+| neural bytes, 10 materials | 28.4 MiB | 28.3 MiB |
+
+* **The kernel is faithful.** The CUDA v2 render equals the PyTorch decode of the same fits to a max of 2.5e-04 (mean
+  2e-05, 90 dB) in display values; the FP4 and FP16 layer-1 paths differ by at most 2e-04.
+* **FP4-direct costs quality here.** concat4 with NVFP4 weights fits worse than the bilinear model in all 10 materials (flat-plane
+  FLIP and texel PSNR), 38 % higher FLIP on the neural pixels, at the same latent bytes. The log's one-material
+  pilot saw +12 %. Single seed per material, one view: do not quote the percentage. Neural bytes count the MLP at 16 bits, so v2 is slightly overcounted.
+* **Decode time in the renderer** (10 launches per frame, GPUs shared and busy, not a headline number): 3.4 ms FP4,
+  4.2 ms FP16 path. The headline numbers are Nicolas's idle-GPU ones in `results/decoder/`.
+* **Videos**: `wipe_original_vs_v2.mp4` (original vs decoder v2) and `v1_vs_v2.mp4` (v1 on bilinear fits vs v2 on concat4 fits; they are
+  different fits of the same materials).

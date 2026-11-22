@@ -1,13 +1,13 @@
-"""Fly-through comparison videos: original textures vs our compressed textures vs decoder v1.
+"""Fly-through comparison videos: original textures vs decoder v2 (FP4-direct) vs decoder v1.
 
-    pixi run python tools/bistro_videos.py --fit out/bistro-pilot --out results/renderer/neural-compare
+    pixi run python tools/bistro_videos.py --fit out/bistro-v2 --fit-v1 out/bistro-pilot --out results/renderer/neural-compare-v2
 
 Writes (all rendered with the same camera path, jitter and TAA, 30 fps):
-  wipe_original_vs_neural.mp4   a divider sweeps across one view: left original (decoded BC data), right our
-                                NVFP4 neural textures (PyTorch decode, output-space stochastic filtering)
-  neural_vs_decoder_v1.mp4      left our neural textures (correct decode), right the CUDA decoder v1 on the same
-                                checkpoints (latent-space stochastic tap, the biased path)
-Materials without a fit use their original textures everywhere.
+  wipe_original_vs_v2.mp4   a divider sweeps across one view: left original (decoded BC data), right our NVFP4
+                            textures through CUDA decoder v2 (concat4 fits, FP4 block-scaled MMA, output-space STF)
+  v1_vs_v2.mp4              left CUDA decoder v1 (bilinear fits, latent-space tap, FP16 MMA), right decoder v2
+Materials without a fit use their original textures everywhere. v1 and v2 use different fits of the same
+materials (bilinear vs concat4 model), each trained with the same loss and budget.
 """
 
 import argparse
@@ -23,9 +23,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from render_bistro import CAMERAS  # noqa: E402
-from sixteen.decoder import CudaDecoder  # noqa: E402
+from sixteen.decoder import CudaDecoder, CudaDecoderV2  # noqa: E402
 from sixteen.render.gbuffer import Camera  # noqa: E402
-from sixteen.render.neural_ref import MixedSource, OverrideStore, TensorSet, load_all_fits  # noqa: E402
+from sixteen.render.neural_ref import MixedSource, MixedSourceV2, OverrideStore, TensorSet, load_all_fits  # noqa: E402
 from sixteen.render.renderer import TAA, Renderer, jitter_at  # noqa: E402
 from sixteen.render.scene import load_scene  # noqa: E402
 from sixteen.render.shade import to_display  # noqa: E402
@@ -58,8 +58,9 @@ def label(img, text, xy, size=26):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fit", default="out/bistro-pilot")
-    ap.add_argument("--out", default="results/renderer/neural-compare")
+    ap.add_argument("--fit", default="out/bistro-v2", help="concat4 + NVFP4 weights fits (decoder v2)")
+    ap.add_argument("--fit-v1", default="out/bistro-pilot", help="bilinear fits (decoder v1)")
+    ap.add_argument("--out", default="results/renderer/neural-compare-v2")
     ap.add_argument("--frames", type=int, default=120)
     ap.add_argument("--ambient", type=float, default=0.3)
     a = ap.parse_args()
@@ -69,16 +70,15 @@ def main():
 
     scene = load_scene("BistroInterior")
     r = Renderer(scene)
-    fits = load_all_fits(scene, a.fit, dev)
+    fits, fits1 = load_all_fits(scene, a.fit, dev), load_all_fits(scene, a.fit_v1, dev)
     ref_over = {f["index"]: TensorSet(f["target"], dev) for f in fits}
-    neu_over = {f["index"]: TensorSet(f["decoded"], dev) for f in fits}
     atlas_ref = TextureAtlas(OverrideStore(r.store, ref_over))
-    atlas_neu = TextureAtlas(OverrideStore(r.store, neu_over))
-    s_ref, s_neu = AtlasSource(atlas_ref, "stf"), AtlasSource(atlas_neu, "stf")
-    s_v1 = MixedSource(AtlasSource(atlas_ref, "stf"), {f["index"]: CudaDecoder.from_checkpoint(f["ckpt"]) for f in fits})
-    print(f"{len(fits)} fitted materials", flush=True)
+    s_ref = AtlasSource(atlas_ref, "stf")
+    s_v2 = MixedSourceV2(AtlasSource(atlas_ref, "stf"), {f["index"]: CudaDecoderV2.from_checkpoint(f["ckpt"]) for f in fits})
+    s_v1 = MixedSource(AtlasSource(atlas_ref, "stf"), {f["index"]: CudaDecoder.from_checkpoint(f["ckpt"]) for f in fits1})
+    print(f"{len(fits)} v2 fits, {len(fits1)} v1 fits", flush=True)
 
-    sources = {"ref": s_ref, "neu": s_neu, "v1": s_v1}
+    sources = {"ref": s_ref, "v2": s_v2, "v1": s_v1}
     taa = {k: TAA(alpha=0.1) for k in sources}
     frames = {"wipe": [], "v1": []}
     for f in range(a.frames):
@@ -89,20 +89,20 @@ def main():
             img[k] = (to_display(taa[k].resolve(o["rgb"], o["gb"], cam, W, H)).flip(0).clamp(0, 1) * 255).round().byte().cpu().numpy()
         # wipe: divider sweeps once across the frame and back
         x = int(W * (0.5 + 0.42 * math.sin(2 * math.pi * f / a.frames)))
-        w = np.concatenate([img["ref"][:, :x], img["neu"][:, x:]], 1).copy()
+        w = np.concatenate([img["ref"][:, :x], img["v2"][:, x:]], 1).copy()
         w[:, max(x - 1, 0) : x + 1] = 255
         w = label(w, "Original (decoded BC textures)", (16, 14))
-        w = label(w, "Ours: NVFP4 neural textures", (W - 440, 14))
+        w = label(w, "Ours: NVFP4, decoder v2", (W - 440, 14))
         frames["wipe"].append(w)
         half = lambda im: np.asarray(Image.fromarray(im).resize((960, 540), Image.LANCZOS))
-        v = np.concatenate([half(img["neu"]), half(img["v1"])], 1)
-        v = label(v, "Ours, correct decode", (12, 10), 22)
-        v = label(v, "Decoder v1 (CUDA, latent-space tap)", (972, 10), 22)
+        v = np.concatenate([half(img["v1"]), half(img["v2"])], 1)
+        v = label(v, "Decoder v1 (FP16 MMA, latent-space tap)", (12, 10), 22)
+        v = label(v, "Decoder v2 (FP4-direct, output-space STF)", (972, 10), 22)
         frames["v1"].append(v)
         if f % 20 == 0:
             print(f"frame {f}/{a.frames}", flush=True)
 
-    for name, fn in (("wipe", "wipe_original_vs_neural.mp4"), ("v1", "neural_vs_decoder_v1.mp4")):
+    for name, fn in (("wipe", "wipe_original_vs_v2.mp4"), ("v1", "v1_vs_v2.mp4")):
         w = imageio.get_writer(out / fn, fps=30, codec="libx264", pixelformat="yuv420p", macro_block_size=1, ffmpeg_params=["-crf", "27", "-preset", "slow"])
         for fr in frames[name]:
             w.append_data(fr)

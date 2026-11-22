@@ -1,6 +1,8 @@
 """Compare our neural textures against the original Bistro textures on a rendered view.
 
-Fits come from `python -m sixteen.sweep configs/bistro-pilot.yaml`. Both renders use the same camera, the
+Fits come from `python -m sixteen.sweep configs/bistro-pilot.yaml` (bilinear model, PyTorch decode only) or
+`configs/bistro-v2.yaml` (concat4 + NVFP4 layer-1 weights; also rendered through CUDA decoder v2, FP4-direct, and
+checked against the PyTorch decode). Both renders use the same camera, the
 same jitter and the same stochastic-tap seeds, and the same atlas path; the reference uses the training
 target tensors, the neural render uses the decoded fits, so the difference is compression error only.
 Materials without a fit use their original textures in both renders.
@@ -24,7 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bistro_inventory import dds_info  # noqa: E402
 from render_bistro import CAMERAS  # noqa: E402
 from sixteen.bistro_data import set_files  # noqa: E402
-from sixteen.render.neural_ref import OverrideStore, TensorSet, load_all_fits  # noqa: E402
+from sixteen.decoder import CudaDecoderV2  # noqa: E402
+from sixteen.render.neural_ref import MixedSourceV2, OverrideStore, TensorSet, load_all_fits  # noqa: E402
 from sixteen.render.renderer import Renderer  # noqa: E402
 from sixteen.render.scene import load_scene  # noqa: E402
 from sixteen.render.shade import to_display  # noqa: E402
@@ -104,6 +107,18 @@ def main():
 
     rgb_ref = r.accumulate(s_ref, cam, W, H, a.frames, ambient=a.ambient)
     rgb_neu = r.accumulate(s_neu, cam, W, H, a.frames, ambient=a.ambient)
+    v2 = all(f["model"].filter == "concat4" and f["model"].w1_fmt == "nvfp4" for f in fits)
+    cuda = {}
+    if v2:
+        # CUDA decoder v2 (FP4-direct layer 1) with seeds equal to the screen pixel index, so taps match s_ref/s_neu
+        decs = {f["index"]: CudaDecoderV2.from_checkpoint(f["ckpt"]) for f in fits}
+        for name, fp4 in (("fp4", True), ("fp16", False)):
+            src = MixedSourceV2(AtlasSource(atlas_ref, "stf"), decs, fp4=fp4)
+            r.render(src, cam, W, H, ambient=a.ambient)  # warm-up
+            src.ms.clear()
+            cuda[name] = (r.accumulate(src, cam, W, H, a.frames, ambient=a.ambient), src)
+        rgb_pt = rgb_neu
+        rgb_neu = cuda["fp4"][0]  # headline render: the real decoder
     gb = r.render(s_ref, cam, W, H)["gb"]
     fitted = torch.zeros(len(scene.materials), dtype=torch.bool, device=dev)
     fitted[list(ref_over)] = True
@@ -113,6 +128,19 @@ def main():
         p["pixel_share"] = cov[p["material"]]
 
     d_ref, d_neu = to_display(rgb_ref).clamp(0, 1), to_display(rgb_neu).clamp(0, 1)
+    extra = {}
+    if v2:
+        d_pt, d_16 = to_display(rgb_pt).clamp(0, 1), to_display(cuda["fp16"][0]).clamp(0, 1)
+        dec_ms = lambda k: float(np.median(cuda[k][1].ms))
+        extra = dict(
+            decode="CUDA decoder v2 (FP4-direct layer 1, output-space STF); PyTorch decode of the same fits reported alongside",
+            flip_whole_frame_pytorch=float(flip.evaluate(d_ref.cpu().numpy(), d_pt.cpu().numpy(), "LDR")[1]),
+            psnr_whole_frame_pytorch=psnr(d_pt, d_ref),
+            cuda_vs_pytorch=dict(max_abs=float((d_neu - d_pt).abs().max()), mean_abs=float((d_neu - d_pt).abs().mean()),
+                                 psnr=psnr(d_neu, d_pt), fp16_path_vs_fp4_path_max_abs=float((d_16 - d_neu).abs().max())),
+            decoder_ms_per_frame_median=dict(fp4=dec_ms("fp4"), fp16=dec_ms("fp16"), materials=len(fits),
+                                             note="all decoder launches of one 1080p frame, GPU shared and busy; each material decodes a full frame"),
+        )
     err, mean_flip, _ = flip.evaluate(d_ref.cpu().numpy(), d_neu.cpu().numpy(), "LDR")
     err = np.asarray(err)
     err_t = torch.from_numpy(err[..., 0] if err.ndim == 3 else err).to(dev)  # FLIP's map is replicated over RGB
@@ -125,7 +153,9 @@ def main():
         bc_bytes_with_mips_total=sum(p["bc_bytes_with_mips"] for p in per), per_material=per,
         checks=["checkpoint psnr_texel == metrics.json (<0.02 dB), per material", "per-pixel forward == pre-decoded texels, per material",
                 "target pushed through the neural path renders identically (max abs diff 0)"],
-        note="PyTorch decode of NVFP4 latents (bilinear model), not the CUDA kernel. Reference = decoded BC textures. Frames use identical jitter and tap seeds.",
+        note=("CUDA decoder v2 on concat4 fits with NVFP4 latents and layer-1 weights; reference = decoded BC textures; identical jitter and tap seeds."
+              if v2 else "PyTorch decode of NVFP4 latents (bilinear model), not the CUDA kernel. Reference = decoded BC textures. Frames use identical jitter and tap seeds."),
+        **extra,
     )
     (out / "neural_compare.json").write_text(json.dumps(res, indent=1))
 
@@ -150,6 +180,9 @@ def main():
     iio.imwrite(out / "crop.jpg", np.concatenate([up(view(sl(d_ref))), up(view(sl(d_neu))), up(view(sl(err_rgb)))], 1), quality=92)
     json.dump({"crop_origin_gl_row_col": [y0, x0], "crop_size_hw": list(win), "mean_flip_in_crop": float(sl(err_t).mean())}, open(out / "crop.json", "w"))
     print(json.dumps({k: v for k, v in res.items() if k not in ("per_material", "checks", "note")}, indent=1))
+    if v2:
+        res["checks"].append("CUDA v2 render vs PyTorch decode of the same fits: see cuda_vs_pytorch")
+        (out / "neural_compare.json").write_text(json.dumps(res, indent=1))
 
 
 if __name__ == "__main__":

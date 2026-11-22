@@ -322,3 +322,41 @@ def test_bistro_target_layout_and_unused_occlusion_channel():
     assert (n[2] > 0.3).float().mean() > 0.99  # tangent-space normals point out of the surface
     assert torch.allclose(t[6], torch.ones_like(t[6]))  # occlusion channel is 0 in the file; treated as 1
     assert 0.2 < t[7].mean() < 0.95  # roughness read from the G channel
+
+
+@cuda
+def test_decoder_v2_source_uses_screen_pixel_seeds():
+    """MixedSourceV2 scatters uvs into a full-frame buffer, so a pixel's tap seed is its screen index (as in the
+    original-texture STF path), not its position in the material's batch."""
+    from sixteen.decoder import CudaDecoderV2
+    from sixteen.model import NeuralTexture
+    from sixteen.render.neural_ref import MixedSourceV2
+
+    torch.manual_seed(0)
+    m = NeuralTexture((2048, 2048), 9, filter="concat4", w1_fmt="nvfp4")
+    with torch.no_grad():
+        for g in m.latents:
+            g.normal_(0, 0.7)
+    dec = CudaDecoderV2(m, (2048, 2048))
+
+    class Zero:  # stands in for the original-texture lookup
+        def sample(self, uv, duv, mat, pid, frame=0):
+            return torch.zeros(len(uv), 9, device=uv.device), None
+
+    n = 5000
+    pid = (torch.randperm(n, device="cuda")[:1500]).sort().values  # a subset, with gaps, like valid pixels
+    uv = torch.rand(len(pid), 2, device="cuda") * 0.9 + 0.05
+    mat = torch.zeros(len(pid), dtype=torch.long, device="cuda")
+    mat[::3] = 1  # every third pixel belongs to a material that has no decoder
+    pid[-1] = n - 1
+    src = MixedSourceV2(Zero(), {0: dec}, fp4=True)
+    tex, _ = src.sample(uv, None, mat, pid, frame=7)
+    full = torch.full((n, 2), 0.5, device="cuda")
+    full[pid] = torch.stack([uv[:, 0], 1 - uv[:, 1]], -1)
+    want = dec.reference(full, 7).clamp(0, 1)[pid]
+    sel = mat == 0
+    assert (tex[sel] - want[sel]).abs().max() < 2e-3
+    assert (tex[~sel] == 0).all()  # other materials untouched
+    # the seeds really are the pixel index: a shifted index gives different taps
+    shifted = dec.reference(full.roll(1, 0), 7).clamp(0, 1)[pid]
+    assert (tex[sel] - shifted[sel]).abs().max() > 2e-2
