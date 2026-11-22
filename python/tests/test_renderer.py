@@ -306,3 +306,19 @@ def test_dx_normal_decode_flips_green_and_rebuilds_z():
     assert n[0] > 0.4  # x unchanged
     assert n[1] < -0.4  # green flipped: DirectX +y (down) becomes OpenGL -y
     assert n[2] > 0 and abs(n.norm().item() - 1) < 1e-4
+
+
+bistro_tex = pytest.mark.skipif(not (BISTRO / "Textures" / "MASTER_Wood_Painted3_BaseColor.dds").exists(), reason="Bistro not downloaded")
+
+
+@bistro_tex
+def test_bistro_target_layout_and_unused_occlusion_channel():
+    from sixteen.bistro_data import load_bistro_material
+
+    t = load_bistro_material("MASTER_Wood_Painted3")
+    assert t.shape == (9, 2048, 2048) and torch.isfinite(t).all()
+    assert 0.0 <= t.min() and t.max() <= 1.0
+    n = t[3:6] * 2 - 1
+    assert (n[2] > 0.3).float().mean() > 0.99  # tangent-space normals point out of the surface
+    assert torch.allclose(t[6], torch.ones_like(t[6]))  # occlusion channel is 0 in the file; treated as 1
+    assert 0.2 < t[7].mean() < 0.95  # roughness read from the G channel

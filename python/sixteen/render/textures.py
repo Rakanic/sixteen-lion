@@ -53,6 +53,8 @@ class TextureSet:
         normal = decode_normal_dx_bc5(_read(d / mat.normal)) if mat.normal else torch.tensor([[[0.5, 0.5, 1.0]]])
         if mat.specular:
             arm = torch.from_numpy(_read(d / mat.specular)[..., :3].astype(np.float32) / 255.0)
+            if float(arm[..., 0].max()) == 0.0:  # Bistro's "occlusion" channel is 0 in every map: unused, not black
+                arm[..., 0] = 1.0
         else:
             arm = torch.tensor([[[1.0, mat.roughness_factor, 0.0]]])
         self.albedo = [l.to(device) for l in pyramid(albedo)]

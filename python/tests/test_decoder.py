@@ -6,7 +6,7 @@ import pytest
 import torch
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CKPTS = sorted(ROOT.glob("out/*/*/m/*/nvfp4*/model.pt"))
+CKPTS = sorted(ROOT.glob("out/*/*/m/*/nvfp4*/model.pt")) + sorted(ROOT.glob("out/*/bistro/*/m/*/nvfp4*/model.pt"))
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available() or not CKPTS, reason="needs CUDA and an NVFP4 checkpoint")
 

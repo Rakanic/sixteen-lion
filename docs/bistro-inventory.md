@@ -59,6 +59,11 @@ Consequences:
   (normals alone are 907 MiB of the 1,392). Training them as full-resolution neural channels
   spends bits on nothing; decide between upsampling them (simple) and storing per-material
   constants.
+- **The "occlusion" channel is unused.** The README says Specular R is occlusion, but R is 0 in all
+  201 specular maps (checked 2026-11-22). Read as ambient occlusion it zeroes the ambient term
+  everywhere. The renderer and the compressor targets treat an all-zero R as 1 (no occlusion).
+  Renders and the stage-1 measurements made before this fix had no ambient light at all, and the
+  `--ambient` option did nothing.
 - **The normal map is DirectX** (README, and measured). `textures.py` flips green and rebuilds z
   so it matches `sixteen/data.py` (OpenGL). `tools/check_normal_convention.py` confirms the
   flip: against the albedo gradient, the normal's y agrees in sign with x in 42 of 48

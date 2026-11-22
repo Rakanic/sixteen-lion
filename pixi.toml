@@ -32,6 +32,7 @@ no-build-isolation = ["nvdiffrast"]
 [pypi-dependencies]
 flip-evaluator = ">=1.6"
 nvdiffrast = { git = "https://github.com/NVlabs/nvdiffrast", tag = "v0.4.0" }
+imageio-ffmpeg = ">=0.8.1, <0.9"
 
 [activation.env]
 PYTHONPATH = "$PIXI_PROJECT_ROOT/python"

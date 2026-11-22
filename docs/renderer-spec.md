@@ -284,6 +284,12 @@ Done 2026-11-21; the answers are in `docs/bistro-inventory.md`:
 
 ## 11. Status and results, 2026-11-21 (Stages 0 and 1)
 
+> **Correction, 2026-11-22.** The specular map's "occlusion" channel is 0 in every Bistro map, and the
+> first version of the renderer used it as ambient occlusion, so the ambient term was zero everywhere:
+> the interior was dark for that reason, and `--ambient` had no effect. Fixed (an all-zero channel
+> is treated as 1, in `render/textures.py` and `bistro_data.py`; test added). The preview frames,
+> the stage-1 measurements and the neural comparison below were all regenerated after the fix.
+
 **Implemented** (`python/sixteen/render/`): FBX import with tangents and uv re-basing
 (`scene.py`), BC1/BC3/BC5 → fp16 mip pyramids and a packed `TextureAtlas` (`textures.py`),
 `original` (trilinear) and `original-stf` sources, in a slow per-material reference form and a
@@ -312,47 +318,70 @@ a test fail. Writing the TAA test exposed a real bug (reprojecting the jittered 
 history); it is fixed and has a regression test.
 
 **Measured** (`results/renderer/stage1_BistroInterior_entrance.json`; 1920×1080; both GPUs were
-91 % / 89 % busy at the start, so timings are
-**not clean** and the p95 is wide):
+90 % / 89 % busy at the start, so timings are **not clean** and the p95 is wide):
 
 | source | raster | texture | shade | total median (p95), ms |
 |---|---|---|---|---|
-| `original` (trilinear) | 9.4 | 13.7 | 4.9 | 32.4 (49.4) |
-| `original-stf` | 9.7 | 6.5 | 4.5 | 24.0 (40.2) |
+| `original` (trilinear) | 2.7 | 10.2 | 2.4 | 18.8 (41.1) |
+| `original-stf` | 2.9 | 4.1 | 2.4 | 16.0 (34.6) |
 
 Stochastic path against a converged reference (256 frames; test frames are independent of it),
 interior, static camera:
 
 | | FLIP | PSNR dB |
 |---|---|---|
-| 1 frame | 0.0308 | 31.3 |
-| 4 frames | 0.0164 | 38.6 |
-| 16 frames | 0.0086 | 45.4 |
-| 64 frames | 0.0046 | 51.5 |
-| TAA, α = 0.1, 64 frames | 0.0121 | 41.1 |
-| trilinear, 1 frame | 0.0227 | 33.1 |
-| trilinear, 64 frames | 0.0155 | 39.6 |
+| 1 frame | 0.0311 | 32.3 |
+| 4 frames | 0.0165 | 39.8 |
+| 16 frames | 0.0086 | 46.8 |
+| 64 frames | 0.0047 | 52.9 |
+| TAA, α = 0.1, 64 frames | 0.0119 | 42.4 |
+| trilinear, 1 frame | 0.0225 | 34.4 |
+| trilinear, 64 frames | 0.0156 | 41.2 |
 
 The error falls about 6 dB per 4× frames, as unbiased noise should. TAA with the neighbourhood
 clamp is worth roughly 8 averaged frames.
 
-The committed preview JPEGs use `--ambient 0.3` so the interior is visible; the measurements above used
-the default 0.03 (`shading` in the JSON). Compare images only at one setting.
+The committed preview JPEGs and the neural comparison use `--ambient 0.3` so the interior is visible; the
+timing and convergence measurements above used the default 0.03 (`shading` in the JSON). Compare images only at one setting.
 
-**What these numbers are not.** They say nothing about neural textures: no neural source exists
-yet. The frame times are for the original-texture path on a shared GPU, not the paper's
+**What these numbers are not.** They say nothing about neural textures (see the next section). The frame times are for the original-texture path on a shared GPU, not the paper's
 headline timing. Everything runs in PyTorch with per-stage synchronization; the shipping path
 is the CUDA decoder.
 
 **Known limitations of the current renderer:** opacity (cut-outs) and glass are drawn opaque;
 emissive maps are ignored; no shadows, so interiors are dark under one sun (`--ambient` raises
 the constant sky term for viewing, but comparisons must use one value); the exterior camera
-preset sits under a canopy; only a two-camera lerp exists as a path; no video output.
+preset sits under a canopy; only a two-camera lerp or a keyframe path exists; videos are written by `tools/bistro_videos.py`.
 
 **Planned checks that have not run yet:** binned multi-material decode against unsorted decode;
-`neural-ref` against `original-stf` (no neural source exists); any timing on an idle GPU; TAA under camera motion on
+any timing on an idle GPU; TAA under camera motion on
 Bistro itself (it is only tested on a synthetic smooth signal).
 
 Reproduce: `pixi run python tools/render_bistro.py --scene BistroInterior --ambient 0.3` and
 `pixi run python tools/renderer_check.py` (first run imports the FBX, 25–90 s, then caches).
 Download: `data/bistro-orca/` from `https://developer.nvidia.com/bistro` (see the inventory).
+
+### Neural comparison (`tools/bistro_compare.py`, `tools/bistro_videos.py`)
+
+Ten Bistro materials were fitted with the pilot config (`configs/bistro-pilot.yaml`: NVFP4 latents,
+bilinear model, shading loss, 20000 steps) and decoded with the PyTorch decoder at texel centres
+(`render/neural_ref.py`). They cover 91.3 % of the interior entrance frame's pixels; the rest keep the original textures.
+Both frames use identical camera, jitter and tap seeds, so the difference is compression error only
+(32 frames, ambient 0.3).
+
+| | value |
+|---|---|
+| FLIP, whole frame | 0.0097 |
+| FLIP, neural pixels only | 0.0046 |
+| PSNR, whole frame / neural pixels | 54.1 / 53.7 dB |
+| neural bytes, 10 materials | 28.3 MiB |
+| BC bytes, same materials (top level / with mips) | 60.0 / 80.0 MiB |
+
+Per material texel PSNR runs from 32.6 dB (`MASTER_Interior_01_Plaster`, noisy texture) to 63.2 dB (`Plates_Ceramic`); see
+`results/renderer/neural-compare/neural_compare.json`. Videos in the same folder: `wipe_original_vs_neural.mp4`
+and `neural_vs_decoder_v1.mp4` (120 frames, 1280×720, TAA).
+
+**Caveats.** (1) This is the PyTorch decode of bilinear-model NVFP4 fits, not the CUDA kernel and not the
+`concat4`/C1 configuration. (2) The reference is decoded BC data, so the claim is "FLIP X at Y× fewer bytes",
+not "beats BC at equal memory"; BC bytes are counted for the same materials. (3) Decoder v1 (CUDA) taps in latent space
+and is about 20 dB off the correct decode; the second video shows that. (4) Shared GPUs, so no timings here.
