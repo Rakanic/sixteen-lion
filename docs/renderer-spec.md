@@ -1,9 +1,11 @@
 # Renderer spec: Bistro with neural textures
 
-Status: draft, 2026-11-21. Written from the proposal (`docs/proposal/index.html`),
-the project log, and the code as of `035b7e5`. Nothing here is built yet.
-Items marked **(unverified)** are facts about Bistro or tools that I have not
-checked; Stage 0 checks them.
+Status, 2026-11-21: **Stages 0 and 1 are implemented** on branch `renderer`
+(`python/sixteen/render/`, `tools/render_bistro.py`, `tools/renderer_check.py`,
+`python/tests/test_renderer.py`); results are in §11. Stages 2 onward (neural sources) are
+not started. Written from the proposal (`docs/proposal/index.html`), the project log and the
+code as of `035b7e5`. Items still marked **(unverified)** have not been checked;
+facts that Stage 0 checked are folded into the text and `docs/bistro-inventory.md`.
 
 ## 1. What the renderer is for
 
@@ -36,15 +38,16 @@ shading model or lighting; those are decisions below.
    v1 is good for plumbing and timing only. Quality numbers need the PyTorch model
    (`neural-ref`, D5) or the `concat4` model with the v2 kernel. `concat4` also
    grows layer 1's input from 40 to about 140 values, so v1 does not run it.
-4. **Nothing exists to start from** (confirmed with the team). No renderer, no
-   Bistro assets, no mesh loader.
+4. **Nothing existed to start from** (confirmed with the team): no renderer, no
+   Bistro assets, no mesh loader. Starting-point dependencies we did not write:
+   nvdiffrast (rasterizer), assimp/pyassimp (FBX import), Pillow (BC1/BC3/BC5 decode),
+   NVIDIA's ORCA Bistro assets.
 5. **Output-space STF needs TAA.** Each pixel decodes one random texel per frame
    and TAA averages the colours, so the renderer needs a history buffer,
    reprojection and a jittered camera.
 6. **The machine is headless and shared.** `bwrc-bwell` has two RTX PRO 6000
-   Blackwell GPUs, no display, and both were 90–93 % busy when checked. EGL is
-   present, `nvcc` is in the pixi env, Vulkan tools are not installed. Timing needs
-   an idle GPU (§8).
+   Blackwell GPUs, no display, and both were 74–95 % busy every time checked. `nvcc`
+   comes with the pixi env. Timing needs an idle GPU (§8).
 7. **Time.** Two people on decoder + renderer, milestone tomorrow (11/22), final
    paper 12/6.
 
@@ -72,7 +75,7 @@ use the same filter, so each comparison names its reference (D5).
 
 ## 4. Decisions
 
-### D1. Rasterization: nvdiffrast over EGL, with a software fallback
+### D1. Rasterization: nvdiffrast CUDA rasterizer (verified)
 
 - **Choice:** use `nvdiffrast` to rasterize Bistro into triangle id + barycentrics,
   with `rasterize_db` for uv derivatives. Everything after the G-buffer is our
@@ -80,13 +83,13 @@ use the same filter, so each comparison names its reference (D5).
   such in the paper and webpage.
 - **Why:** least code and no display needed. The G-buffer is already a CUDA
   tensor, so there is no interop to write.
-- **Gate (Stage 0, ≤ 2 h):** build nvdiffrast in the pixi env and rasterize one
-  triangle headless on a free GPU. **(unverified)** I believe it offers a CUDA-based
-  rasterizer context as well as an OpenGL/EGL one; check which works here and what
-  limits it has (resolution, triangle count). If neither works, fall back to a CUDA visibility-
-  buffer rasterizer (64-bit `atomicMin` of depth|triangle id, then barycentrics in
-  a resolve pass). That is about 300 lines and has no graphics-API dependency, but
-  it is more work and slower on large triangles.
+- **Gate: passed.** nvdiffrast v0.4.0 has `RasterizeCudaContext`, which needs no
+  OpenGL, EGL or display. Built from the git tag (it is not on PyPI) with
+  `no-build-isolation` and the CUDA dev libraries in `pixi.toml`. It rasterizes 1080p
+  headless; a test triangle covered exactly the expected 1/8 of the screen with the
+  expected uv derivatives. It handles Bistro's 1.0 M (interior) and 2.8 M (exterior)
+  triangles at 4–14 ms per frame on a busy GPU. The software-rasterizer fallback is not
+  needed.
 - **Rejected:** a standalone Vulkan/OpenGL app with CUDA interop. It needs a
   display, a window system and interop code, and none of that is the contribution.
 
@@ -112,8 +115,8 @@ use the same filter, so each comparison names its reference (D5).
 
 - **Choice:** a per-pixel version of `sixteen/shading.py` (same GGX, same
   `AMBIENT`) with one directional light and the existing constant sky term, using
-  a per-vertex tangent frame. If Bistro has no tangents **(unverified)**, derive
-  them from uv derivatives per triangle.
+  a per-vertex tangent frame from assimp's tangent-space computation (not the FBX's own
+  data), orthonormalized per pixel, with back faces flipped toward the viewer.
 - **Why:** the project's FLIP numbers are all computed with this model, so the
   renderer stays comparable with `results/`. Texture decoding is what is being
   tested, not lighting realism.
@@ -124,9 +127,12 @@ use the same filter, so each comparison names its reference (D5).
 
 ### D4. Filtering and LOD: stochastic first, neural mips later
 
-- **Choice:** decode one full-resolution texel per pixel per frame, offset by a
-  random point inside the pixel's uv footprint (from the G-buffer derivatives), and
-  let TAA average. This is stochastic texture filtering done in output space.
+- **Choice:** decode one full-resolution texel per pixel per frame, chosen among the
+  four nearest texels with bilinear weights (the same tap rule and hash as the CUDA
+  decoder), and let TAA average. This is stochastic texture filtering done in output
+  space. **No footprint offset is needed:** the camera is jittered every frame, which
+  already integrates over the pixel; adding a footprint offset would blur twice. (An
+  earlier draft of this spec had the offset; implementing it showed it is redundant.)
 - **Why:** it fits the C1 story (no latent blending, stored codes reach the MMA) and
   needs no mip chain of neural textures.
 - **Risk:** large footprints (distant surfaces, grazing angles) give high variance,
@@ -140,7 +146,7 @@ use the same filter, so each comparison names its reference (D5).
 | source | what it is | why |
 |---|---|---|
 | `original` | source images at fp16, trilinear mips | the milestone item (Bistro with original textures); frame-time floor |
-| `original-stf` | the same images, decoded by the same footprint jitter and seeds as the neural path | **FLIP reference** for every neural source |
+| `original-stf` | the same images, one stochastic bilinear tap per pixel per frame, same hash and seeds as the neural path and the CUDA decoder, camera jitter on | **FLIP reference** for every neural source |
 | `neural-ref/<fmt>` | PyTorch model on the G-buffer uvs, correct decode (about 42 ms per 1080p frame) | quality numbers while v2 is unfinished; correctness check for the kernels |
 | `neural/<fmt>` | our CUDA decoder (v1 for plumbing and timing, v2 for the real thing) | the system under test |
 | `bc` | block-compressed baseline; **which one is undecided, see below** | memory/quality comparison |
@@ -148,7 +154,9 @@ use the same filter, so each comparison names its reference (D5).
 **Why two original sources.** Trilinear-then-shade is not the average of shaded
 point samples, so comparing a converged STF render against `original` would measure
 the filter, not the compression. FLIP for neural sources is always against
-`original-stf`, accumulated over 64+ frames.
+`original-stf`, accumulated over many frames. Measured on the interior (§11), a
+64-frame trilinear render sits at FLIP 0.0155 from a converged STF render, as large
+as the STF noise of a 4–16 frame average, so the distinction is not academic.
 
 **Which model variant "compress all materials" trains** (bilinear or `concat4`)
 depends on the `concat4` pilot. Its outputs (`out/concat4-pilot`) are not in this
@@ -162,10 +170,16 @@ starts training.
 
 They answer different questions (our formats vs block compression of a neural
 texture, vs vs conventional textures). **Team decision needed**; the spec assumes
-(2) until told otherwise. Either way, **(unverified)** whether CUDA texture objects
-on block-compressed `cudaArray`s are usable from our code (hardware filtering, fair
-timing), and which encoder to use. Bistro's own textures may already be BCn DDS,
-which would change what "original" means; Stage 0 checks this.
+(2) until told otherwise.
+
+**Stage 0 found that Bistro's own textures are already BC1/BC3 + BC5 + BC3** (see
+`docs/bistro-inventory.md`). So reading (2) needs no encoder for Bistro: the shipped
+textures are the baseline, at 12 bits per full-resolution texel for opaque materials
+(the ARM maps are mostly 16²), and the "uncompressed original" does not exist. The
+reference is the decoded BC data. Still **(unverified)**: whether CUDA texture
+objects on block-compressed `cudaArray`s are usable from our code (hardware filtering,
+fair timing for a BC frame time); the current `original` source decodes BC to fp16 on
+load, so it is a quality reference, not a BC timing.
 
 ### D6. Demo: record first, live if a display turns up
 
@@ -192,17 +206,19 @@ decode(uv[N,2], pixel_id[N], material_id[N], frame) -> rgb9[N, 9]   # contract s
 ```
 
 The 9-channel layout stays as `sixteen/data.py` (albedo RGB sRGB-encoded, normal
-XYZ, AO, roughness, metalness). Bistro's own packing **(unverified)** gets
-converted into it once, at asset-prep time, not in the renderer.
+XYZ, AO, roughness, metalness). Bistro's packing (BaseColor RGB + opacity alpha,
+Specular R=AO G=roughness B=metalness, DirectX normals) is converted into it when the
+textures are loaded (`render/textures.py`); alpha is carried separately and unused so
+far.
 
 ## 6. Stages, dates and gates
 
 | stage | when | what | done when |
 |---|---|---|---|
-| 0 | Sat 11/21 – Sun 11/22 | get Bistro; inventory (§9); nvdiffrast gate; if time, one albedo-textured frame | inventory written to `docs/bistro-inventory.md`; gate pass/fail recorded. **Do not let this displace milestone video, slides or webpage.** |
-| 1 | 11/23 – 11/25 | `original` path: scene load, G-buffer, GGX shading, camera path, TAA, PNG/video out, per-stage ms | headless fly-through renders; frame time breakdown printed |
+| 0 | Sat 11/21 – Sun 11/22 | get Bistro; inventory (§9); nvdiffrast gate; if time, one albedo-textured frame | **DONE 11/21.** `docs/bistro-inventory.md`; gate passed (D1); textured frames in `results/renderer/`. |
+| 1 | 11/23 – 11/25 | `original` path: scene load, G-buffer, GGX shading, camera path, TAA, PNG/video out, per-stage ms | **MOSTLY DONE 11/21** (§11). Still open: alpha/emissive, a real fly-through path (two-camera lerp only), video output, a better exterior camera. |
 | 2 | 11/25 – 11/27 | compress all Bistro materials (variant chosen per D5); material table; binned decode with the **v1 kernel as a plumbing and timing check only**; `neural-ref` vs `original-stf` FLIP | one Bistro frame with every material neural; v1 output matches `neural-ref` on the same taps; FLIP number from `neural-ref` |
-| 3 | 11/27 – 11/29 | output-space STF + footprint jitter; v2 FP4-direct kernel on the `concat4` model if ready; temporal-stability measurement | 64-frame accumulation of the CUDA path matches `neural-ref` (not v1) and approaches `original-stf`; flicker metric recorded |
+| 3 | 11/27 – 11/29 | output-space STF (done for the original source, §11); v2 FP4-direct kernel on the `concat4` model if ready; temporal-stability measurement | 64-frame accumulation of the CUDA path matches `neural-ref` (not v1) and approaches `original-stf`; flicker metric recorded |
 | gate | **end of 11/27** | if Stage 2 is not met, switch the headline scene to FlightHelmet (the proposal's fallback), keep Bistro as original-texture teaser only | decision logged in `.claude/project-log.md` |
 | 4 | 11/30 – 12/3 | timing per format on an idle GPU; BC baseline; fly-through video; display decision | numbers in `results/renderer/` |
 | 5 | 12/1 – 12/6 | paper and video | — |
@@ -211,17 +227,19 @@ The renderer must not block on the v2 kernel: Stage 2 uses v1 and Stage 3 swaps
 the kernel behind the same `decode` contract. If v2 is late, the paper's quality
 numbers still exist (from `neural-ref`), but its timing claim does not.
 
-**Training budget.** One fit at the large grid took about 8 minutes on a busy GPU
-(`results/milestone/results.csv`, `train_s`). The material count is unknown until
-Stage 0. Multiply it out before committing to "every material", and decide then
-whether to cap texture resolution or fit at a smaller grid.
+**Training budget.** A mid-grid fit took a median 326 s on a busy GPU
+(`results/milestone/results.csv`, `train_s`). Bistro has 64 (interior) and 121 (exterior)
+materials with real 2048² detail (`docs/bistro-inventory.md`), so about 5.8 and 11
+GPU-hours. Do the interior first. The remaining materials are near-constant and should
+not be fitted as full-resolution neural textures.
 
 ## 7. Measurements
 
-- **Frame time:** CUDA events around bin, decode, shade, TAA, 200 frames after
-  warm-up, median and p95, on a fixed camera path. Rasterization is timed
-  separately: CUDA events if it runs through nvdiffrast's CUDA context, otherwise an
-  OpenGL timer query (CUDA events do not see GL work). Report both and their sum.
+- **Frame time:** median and p95 over a fixed camera path after warm-up, per stage
+  (raster, texture/decode, shade, TAA). Stage 1 times each stage as wall-clock with a
+  device synchronize around it (`Renderer.render`), which includes Python launch
+  overhead. The rasterizer is the CUDA context, so CUDA events would also work; switch to
+  events when the neural kernels are timed.
 - **Decode time:** µs per Mpixel, with and without binning, per latent format
   (FP4 / FP6 / FP8 / FP16 MMA).
 - **Quality:** FLIP (and PSNR second) of `neural-ref/<fmt>`, `neural/<fmt>` and `bc`
@@ -236,22 +254,22 @@ whether to cap texture resolution or fit at a smaller grid.
 | risk | effect | mitigation |
 |---|---|---|
 | both GPUs busy, so timings are not clean | headline numbers unusable | `bench` script records GPU utilization first and refuses to publish a timing above 5 %; agree a booking slot with whoever else is using the box |
-| nvdiffrast does not build or run headless | Stage 1 slips a day | software rasterizer fallback (D1) |
+| ~~nvdiffrast does not build or run headless~~ | resolved (D1) | — |
 | Bistro material count or texture size makes "compress everything" too slow | Stage 2 slips | cap resolution; compress a subset; FlightHelmet gate |
 | STF flicker is visible at distance | weak temporal result | neural mip levels for the far field (D4) |
-| alpha-tested foliage, emissive, glass **(unverified)** | does not fit the 9 channels | mark as `original`-only in the table and report coverage honestly |
+| alpha-tested foliage, emissive, glass | does not fit the 9 channels: 4 interior / 12 exterior materials have real alpha (3.8 % / 10.1 % of triangles) | render as `original`-only and report the covered fraction honestly; currently drawn opaque |
 | binning overhead eats the decode speedup | paper's timing claim weakens | report with and without; consider per-tile material lists |
 
 ## 9. Stage 0 inventory checklist
 
-Fill in from the actual download, not from memory:
+Done 2026-11-21; the answers are in `docs/bistro-inventory.md`:
 
-- [ ] source, licence, file format (FBX/OBJ/glTF), and which parts (exterior, interior)
-- [ ] triangle and material count; unique texture count; texture resolutions
-- [ ] texture file format (PNG or BCn DDS) and how maps are packed (base colour, normal, specular/ORM)
-- [ ] tangents present? uv ranges and tiling (the decoder wraps)
-- [ ] materials needing alpha test, emissive, transparency
-- [ ] disk size, and where it lives (`data/` is gitignored)
+- [x] source, licence, file format (FBX/OBJ/glTF), and which parts (exterior, interior)
+- [x] triangle and material count; unique texture count; texture resolutions
+- [x] texture file format (PNG or BCn DDS) and how maps are packed (base colour, normal, specular/ORM)
+- [x] tangents present? uv ranges and tiling (the decoder wraps)
+- [x] materials needing alpha test, emissive, transparency
+- [x] disk size, and where it lives (`data/` is gitignored)
 
 ## 10. Open questions for the team
 
@@ -260,3 +278,70 @@ Fill in from the actual download, not from memory:
 3. **Model variant** for "compress all materials": decided by the `concat4` pilot; who reads it?
 4. Display path for the Blackwell box (monitor on the workstation card, or remote GL): decide by 12/3.
 5. Is a recorded split-screen acceptable for the live-demo requirement?
+
+## 11. Status and results, 2026-11-21 (Stages 0 and 1)
+
+**Implemented** (`python/sixteen/render/`): FBX import with tangents and uv re-basing
+(`scene.py`), BC1/BC3/BC5 → fp16 mip pyramids and a packed `TextureAtlas` (`textures.py`),
+`original` (trilinear) and `original-stf` sources, in a slow per-material reference form and a
+vectorized atlas form (`sources.py`), nvdiffrast G-buffer with uv derivatives (`gbuffer.py`),
+per-pixel GGX using `sixteen.shading.ggx_radiance` (`shade.py`), jittered accumulation and TAA
+(`renderer.py`), and CLIs `tools/render_bistro.py` (PNG), `tools/renderer_check.py`
+(measurements), `tools/bistro_inventory.py`.
+
+**Verified** (`python/tests/test_renderer.py`, 14 tests, plus 6 existing; run with `pixi run test`):
+
+| claim | how |
+|---|---|
+| uv, uv derivatives, material ids and jitter direction are right | synthetic two-quad scene with hand-computed values |
+| shading equals `ggx_radiance` and is invariant to rotating the whole scene | identity-frame comparison; rotated geometry, light and eye |
+| texture v axis points up; atlas lookup equals the per-material reference | gradient texture; random uvs, mips and tiling, both filter modes |
+| mean of stochastic taps equals bilinear interpolation | 2048 frames at 512 points, max error < 0.03 |
+| STF seeds equal the CUDA decoder's | compared with `decoder.pixel_seeds` |
+| uv re-basing preserves uv mod 1 | integer-shift check |
+| Bistro interior has 1,046,609 triangles, 71 materials, all textures present | README count |
+| TAA reprojection follows camera motion; with jitter it converges to the pixel mean | measured 2e-7 error on smooth signal; 0.011 vs 0.21 (jittered-hit variant) and 0.24 (one frame) |
+
+The tests were mutation-checked: removing the v flip, flipping the bitangent handedness or
+jitter sign, changing the STF hash, swapping trilinear weights, or scaling the normal each makes
+a test fail. Writing the TAA test exposed a real bug (reprojecting the jittered hit blurred the
+history); it is fixed and has a regression test.
+
+**Measured** (`results/renderer/stage1_BistroInterior_entrance.json`; 1920×1080; both GPUs were
+91 % / 89 % busy at the start, so timings are
+**not clean** and the p95 is wide):
+
+| source | raster | texture | shade | total median (p95), ms |
+|---|---|---|---|---|
+| `original` (trilinear) | 9.4 | 13.7 | 4.9 | 32.4 (49.4) |
+| `original-stf` | 9.7 | 6.5 | 4.5 | 24.0 (40.2) |
+
+Stochastic path against a converged reference (256 frames; test frames are independent of it),
+interior, static camera:
+
+| | FLIP | PSNR dB |
+|---|---|---|
+| 1 frame | 0.0308 | 31.3 |
+| 4 frames | 0.0164 | 38.6 |
+| 16 frames | 0.0086 | 45.4 |
+| 64 frames | 0.0046 | 51.5 |
+| TAA, α = 0.1, 64 frames | 0.0121 | 41.1 |
+| trilinear, 1 frame | 0.0227 | 33.1 |
+| trilinear, 64 frames | 0.0155 | 39.6 |
+
+The error falls about 6 dB per 4× frames, as unbiased noise should. TAA with the neighbourhood
+clamp is worth roughly 8 averaged frames.
+
+**What these numbers are not.** They say nothing about neural textures: no neural source exists
+yet. The frame times are for the original-texture path on a shared GPU, not the paper's
+headline timing. Everything runs in PyTorch with per-stage synchronization; the shipping path
+is the CUDA decoder.
+
+**Known limitations of the current renderer:** opacity (cut-outs) and glass are drawn opaque;
+emissive maps are ignored; no shadows, so interiors are dark under one sun (`--ambient` raises
+the constant sky term for viewing, but comparisons must use one value); the exterior camera
+preset sits under a canopy; only a two-camera lerp exists as a path; no video output.
+
+Reproduce: `pixi run python tools/render_bistro.py --scene BistroInterior --ambient 0.3` and
+`pixi run python tools/renderer_check.py` (first run imports the FBX, 25–90 s, then caches).
+Download: `data/bistro-orca/` from `https://developer.nvidia.com/bistro` (see the inventory).

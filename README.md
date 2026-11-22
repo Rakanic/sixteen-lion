@@ -13,15 +13,16 @@ paper is in `paper/` (Overleaf submodule).
   - `train.py`: QAT training and evaluation of one run
   - `sweep.py`, `figures.py`: sweeps from `configs/`, plots and tables
   - `decoder.py`: packing + binding for the CUDA decoder (`cuda/ntc_decode.cu`)
+- `python/sixteen/render/`: deferred renderer for Bistro (nvdiffrast G-buffer, GGX shading, TAA); plan in `docs/renderer-spec.md`
 - `cuda/`: Tensor Core decoder kernel; `cuda/probe/` checks block-scaled FP4 MMA (build target `sm_120a`)
 - `python/tests/`: unit tests (decoder tests need a GPU and a trained NVFP4 checkpoint)
 - `results/`: finished experiments, with `results/README.md` as the step-by-step summary
 - `docs/paper-brief.md`: contributions, outline and figure list for the paper
 - `docs/proposal-changes.md`: what changed since the proposal, and why
-- `docs/renderer-spec.md`: plan for the Bistro renderer
+- `docs/renderer-spec.md`: plan and status of the Bistro renderer; `docs/bistro-inventory.md`: what the Bistro assets contain
 - `docs/proposal/`: copy of the original proposal page, for context
 - `configs/`: sweep definitions
-- `tools/`: data download, latent profiling, rounding experiment, decoder benchmark
+- `tools/`: data download, latent profiling, rounding experiment, decoder benchmark, Bistro inventory and renderer checks (`render_bistro.py`, `renderer_check.py`)
 - `out/`: run outputs (not tracked)
 
 ## Quick start
@@ -37,3 +38,6 @@ pixi run figures out/milestone --out <plots dir>
 
 Each run writes `out/<sweep>/<material>/<grid>/<loss>/<format>/metrics.json`
 plus image crops; finished runs are skipped, so sweeps resume.
+
+Bistro (for the renderer): download `Bistro_v5_2.zip` from <https://developer.nvidia.com/bistro> (CC BY 4.0), unzip into
+`data/bistro-orca/`, then `pixi run python tools/render_bistro.py --scene BistroInterior --ambient 0.3`.

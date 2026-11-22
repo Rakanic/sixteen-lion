@@ -64,7 +64,7 @@ Technical, by priority:
 - [x] P0 FP4 block-scaled MMA verified on RTX PRO 6000: `m16n8k64 kind::mxf4 block_scale`, needs target `sm_120a`
 - [ ] P0 4-neighbour (`concat4`) model: quality vs bilinear at equal memory (`out/concat4-pilot`, running)
 - [ ] P0 decoder v2: layer 1 as two FP4 block-scaled MMAs (one per grid), output-space STF; time vs v1 on an idle GPU
-- [ ] P0 Bistro loads with original textures in the renderer
+- [x] P0 Bistro loads with original textures in the renderer: interior + exterior render headless at 1080p (branch `renderer`, 2026-11-21; `docs/renderer-spec.md` §11). Not yet: neural sources, alpha, emissive, video
 - [ ] P1 decode time vs latent format (FP4 / FP6 / FP8 / FP16 MMA) and Bistro frame time: the paper's headline numbers
 - [ ] P1 all Bistro materials compressed, decoder wired into renderer, per-pixel LOD
 - [ ] P1 BC1 baseline at equal memory
