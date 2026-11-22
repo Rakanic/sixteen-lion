@@ -86,6 +86,7 @@ Copy figures into `paper/figures/` under the same names; regenerate from the rep
 | `results/shading-control/loss_flip.png`, `results/shading-pilot/loss_flip.png` | Fig./Tab. shading loss | FLIP with texel loss vs texel + shading loss at equal memory. |
 | `results/profile/latent_on_e2m1_grid.png`, `latent_hist.png` | Fig. profile | Latent values relative to their block scale; after QAT values pile up on rounding boundaries. |
 | `results/rounding-pilot/results.csv`, `castle_shaded_grazing_*.png` | Tab./Fig. rounding | Round-to-nearest vs texel-aware vs rendering-aware rounding, same storage. |
+| `results/decoder/speedup.pdf` (vector; `.png` too) | Fig. speed | Decode time per 1080p frame for the same decoder in PyTorch (eager and compiled, fp32/fp16) and in our fused CUDA kernel with FP16 or FP4 Tensor Cores; labels give the FP4-direct speedup. The gap to PyTorch is kernel fusion; the FP4-specific gain is 1.21x over our fused FP16 kernel. |
 | `results/decoder/v1_castle_brick_07_nvfp4.json` | text, Tab. timing | Decoder accuracy and 1080p time (v1; re-measure on an idle GPU for the final paper). |
 
 ## 6. Writing rules

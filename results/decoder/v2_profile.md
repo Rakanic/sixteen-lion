@@ -50,7 +50,7 @@ because its bottleneck is fetch latency; FP16-unpack does not (it is
 arithmetic-bound, and the cap makes it spill: 0.37 ms). The earlier 1.00–1.02x
 compared both at the default setting.
 
-## Baselines (`v2_baselines.json`, `tools/bench_baselines.py`)
+## Baselines (`v2_baselines.json`, `tools/bench_baselines.py`; chart `speedup.png` / `speedup.pdf`)
 
 Same work per frame (STF texel choice, 4 neighbours of both grids, positional
 encoding, 3 layers), latents and layer-1 weights pre-quantized once; all
@@ -58,10 +58,10 @@ outputs agree within 0.003 of the fp32 reference.
 
 | decoder | ms / 1080p frame | FP4-direct faster by |
 |---|---|---|
-| PyTorch eager fp32 (CUDA cores) | 19.3 | 85x |
-| PyTorch eager fp32, TF32 Tensor Cores | 19.0 | 84x |
-| PyTorch eager fp16 (Tensor Cores) | 15.7 | 69x |
-| PyTorch compiled fp32 (`torch.compile`, max-autotune) | 5.82 | 26x |
+| PyTorch eager fp32 (CUDA cores) | 19.3 | 84.9x |
+| PyTorch eager fp32, TF32 Tensor Cores | 19.1 | 83.9x |
+| PyTorch eager fp16 (Tensor Cores) | 15.8 | 69.4x |
+| PyTorch compiled fp32 (`torch.compile`, max-autotune) | 5.83 | 25.7x |
 | PyTorch compiled fp16 (Tensor Cores) | 4.22 | 18.6x |
 | ours, fused CUDA, FP16-unpack | 0.275 | 1.21x |
 | ours, fused CUDA, FP4-direct | 0.227 | 1x |

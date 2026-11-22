@@ -10,7 +10,7 @@ Latest state. Supersedes the earlier version of this file (commit 2d499e5).
 | 4-neighbour model | quality cost at equal memory, one material: FLIP 0.0567 vs 0.0554 bilinear (+2.3 %); with layer-1 weights also NVFP4 (needed by the FP4 MMA): 0.0620 (+12 %) | `results/concat4-pilot/results.json` |
 | decoder | v1 (bilinear model, FP16 MMA) matches PyTorch, ~1 ms per 1080p frame on a busy GPU. **v2 implemented**: the 4-neighbour model with layer 1 as FP4 block-scaled MMA, exact vs PyTorch (max error 2e-4); an FP16-unpack variant of the same kernel matches too | `results/decoder/`, `cuda/ntc_decode_v2.cu` |
 | speed (idle GPU, 1080p frame, one lookup per pixel) | **citable**: FP4-direct 0.227 ms per frame. **FP4-direct is 1.18–1.21x faster than our equally fused FP16-unpack kernel** (each at its best launch setting); this is the FP4-specific result. Against the best PyTorch version of the same work (compiled, fp16 Tensor Cores, 4.22 ms) it is 18.6x faster, but say that this gap is kernel fusion (standard practice), not FP4; do not headline the eager-PyTorch 85x. SASS confirms the FP4 path runs `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X`. Explain the modest FP4 gain with the profile (arithmetic bottleneck removed, fetch latency exposed) | `results/decoder/v2_profile.md`, `v2_best_vs_best.json`, `v2_baselines.json` |
-| figures | `rd_flip.png`, `crops_castle_brick_07_m.jpg`; optionally `results/rounding/rounding_flip.png` | |
+| figures | `rd_flip.png`, `crops_castle_brick_07_m.jpg`; **`results/decoder/speedup.pdf`** (all decoders, keep the whole table; caption in the brief's figure manifest); optionally `results/rounding/rounding_flip.png` | |
 
 `results/rounding-interim/` was removed; use `results/rounding/`.
 
