@@ -16,9 +16,9 @@ the four scale blocks of one FP4 MMA**.
 
 | # | contribution | status | evidence |
 |---|---|---|---|
-| C1 | **FP4-direct decoding.** A latent layout and decoder in which each 16-channel latent texel is one NVFP4 block, so the four neighbouring latent texels map onto the four scale blocks (K = 64) of one block-scaled FP4 MMA (`m16n8k64`); stored codes reach the Tensor Core unpacked, and filtering moves to the decoded colors (output-space stochastic filtering). | FP4 block-scaled MMA verified on the GPU (MXFP4 and NVFP4 variants, `cuda/probe/`); v1 decoder (FP16 MMA) works; 4-neighbour model and FP4 kernel **in progress** | `results/decoder/`, `cuda/` |
+| C1 | **FP4-direct decoding.** A latent layout and decoder in which each 16-channel latent texel is one NVFP4 block, so the four neighbouring latent texels map onto the four scale blocks (K = 64) of one block-scaled FP4 MMA (`m16n8k64`); stored codes reach the Tensor Core unpacked, and filtering moves to the decoded colors (output-space stochastic filtering). | FP4 block-scaled MMA verified on the GPU (MXFP4 and NVFP4 variants, `cuda/probe/`); v1 decoder (FP16 MMA) works; v2 FP4-direct kernel implemented and exact; 4-neighbour model costs +2.3 % FLIP (+12 % with FP4 weights); FP4-direct 1.18–1.21x faster than our fused FP16-unpack kernel (idle GPU; SASS shows native FP4 MMA); 18.6x over compiled fp16 PyTorch is fusion, not FP4 | `results/decoder/`, `cuda/` |
 | C2 | **What matters for block-scaled neural textures**, a controlled study: (a) all block-scaled formats share one quality-vs-memory frontier, MXFP6 slightly best; (b) a GGX shading loss cuts FLIP by 23 % at every precision, so it is general, not quantization-specific; (c) after QAT a third of latents sit on a rounding boundary; (d) choosing block scales by error during training hurts. | done | `results/milestone/`, `shading-pilot/`, `shading-control/`, `profile/`, `scale-select/` |
-| C3 | **Rendering-aware rounding.** After training, choose up/down for near-boundary latents by shaded-image error; same storage, decoder frozen; FLIP −3 to −10 %, beating texel-error rounding on every material. | done on 3 materials; 6-material × 2-seed robustness run with unseen lighting **in progress** | `results/rounding-pilot/`, later `results/rounding/` |
+| C3 | **Rendering-aware rounding.** After training, choose up/down for near-boundary latents by shaded-image error; same storage, decoder frozen; FLIP −3 to −10 %, beating texel-error rounding on every material. | done: 48/48 models (6 materials × 2 seeds × 2 formats × 2 training losses), test and unseen lighting | `results/rounding-pilot/`, `results/rounding/` |
 
 Position C3 honestly: it is AdaRound (Nagel et al. 2020) with a rendering loss;
 claim the rendering objective and the measurement, not the optimizer.
@@ -86,6 +86,7 @@ Copy figures into `paper/figures/` under the same names; regenerate from the rep
 | `results/shading-control/loss_flip.png`, `results/shading-pilot/loss_flip.png` | Fig./Tab. shading loss | FLIP with texel loss vs texel + shading loss at equal memory. |
 | `results/profile/latent_on_e2m1_grid.png`, `latent_hist.png` | Fig. profile | Latent values relative to their block scale; after QAT values pile up on rounding boundaries. |
 | `results/rounding-pilot/results.csv`, `castle_shaded_grazing_*.png` | Tab./Fig. rounding | Round-to-nearest vs texel-aware vs rendering-aware rounding, same storage. |
+| `results/decoder/speedup.pdf` (vector; `.png` too) | Fig. speed | Decode time per 1080p frame for the same decoder in PyTorch (eager and compiled, fp32/fp16) and in our fused CUDA kernel with FP16 or FP4 Tensor Cores; labels give the FP4-direct speedup. The gap to PyTorch is kernel fusion; the FP4-specific gain is 1.21x over our fused FP16 kernel. |
 | `results/decoder/v1_castle_brick_07_nvfp4.json` | text, Tab. timing | Decoder accuracy and 1080p time (v1; re-measure on an idle GPU for the final paper). |
 
 ## 6. Writing rules

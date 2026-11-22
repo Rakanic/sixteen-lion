@@ -1,0 +1,27 @@
+{
+ "bilinear": {
+  "bpp_total": 5.653110504150391,
+  "psnr_texel": 32.561674526910814,
+  "psnr_shaded": 34.19858495194328,
+  "flip": 0.05536549662550291,
+  "psnr_unseen": 34.2545394836357,
+  "flip_unseen": 0.058573788652817406
+ },
+ "concat4": {
+  "bpp_total": 5.677524566650391,
+  "psnr_texel": 32.02876336067683,
+  "psnr_shaded": 33.81850236236757,
+  "flip": 0.05671891197562218,
+  "psnr_unseen": 33.855012206885654,
+  "flip_unseen": 0.061049509793519974
+ },
+ "concat4_w1nvfp4": {
+  "bpp_total": 5.677524566650391,
+  "psnr_texel": 31.724567445868416,
+  "psnr_shaded": 33.2287394841242,
+  "flip": 0.06203351294000944,
+  "psnr_unseen": 33.327334056171516,
+  "flip_unseen": 0.06523654361565907
+ },
+ "_about": "castle_brick_07, NVFP4 latents, mid grid, texel + 4 x shading loss, seed 0. bilinear: latents blended before the MLP; concat4: 4 neighbouring latent texels as stored (FP4-direct-ready); concat4_w1nvfp4: concat4 with layer-1 latent weights also NVFP4 (required by the FP4 MMA)."
+}

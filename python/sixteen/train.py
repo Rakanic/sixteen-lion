@@ -31,6 +31,7 @@ DEFAULTS = dict(
     hidden=64,
     layers=2,
     filter="bilinear",  # latent sampling: bilinear or concat4 (see sixteen.model)
+    w1_fmt=None,  # QAT format of layer 1's latent weights (concat4 only), e.g. nvfp4
     w_texel=1.0,
     w_shading=0.0,
     seed=0,
@@ -54,7 +55,8 @@ def train(material, fmt, grids, out_dir=None, device="cuda", **kw):
     H, W, C = ref.shape
     flat = ref.view(-1, C)
 
-    model = NeuralTexture((H, W), C, grids=grids, hidden=cfg["hidden"], layers=cfg["layers"], filter=cfg["filter"]).to(device)
+    model = NeuralTexture((H, W), C, grids=grids, hidden=cfg["hidden"], layers=cfg["layers"], filter=cfg["filter"],
+                         w1_fmt=cfg["w1_fmt"]).to(device)
     opt = torch.optim.Adam(
         [
             {"params": model.latents.parameters(), "lr": cfg["lr_latent"]},

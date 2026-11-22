@@ -1,7 +1,7 @@
 ---
 project: Sixteen Wide — neural texture decoders for GPU matrix hardware
 goal: Bistro at 1920×1080 rendered in real time with every material stored in block-scaled (MX / NVFP4) neural textures trained with shading-aware quantization, beating texel-loss QAT on FLIP-after-shading at equal memory, in a 4–6 page SIGGRAPH-format paper.
-status: decoder v1 works; 4-neighbour model + FP4-direct kernel in progress; milestone report + paper draft in paper/ (not yet pushed to Overleaf)
+status: FP4-direct decoder v2 works (1.2x over fused FP16, native FP4 MMA); rounding 48/48; milestone report + paper draft in paper/ (not yet pushed to Overleaf)
 code: github.com/Rakanic/sixteen-lion@main; paper/ = Overleaf submodule
 ---
 
@@ -32,7 +32,7 @@ flowchart LR
 | bits per texel, 9 channels (BC1+BC5+BC1 = 16) | lower at equal quality | 5.3 (MXFP4) / 5.7 (NVFP4), mid grid |
 | PSNR after shading vs uncompressed (dB) | report per format | 32.5–33.9 MXFP4, texel loss; +1.8 dB with shading loss |
 | FLIP after shading (mean) | lower with shading-aware quant. than texel loss | −15 % MXFP4, −23 % fp32 (shading loss alone) |
-| decode time (µs per Mpixel) | FP4-direct vs FP16-unpack | 400–560 (v1, FP16 MMA, GPUs under load) |
+| decode time, 1080p frame (ms) | FP4-direct vs FP16-unpack | 0.227 vs 0.275 (1.21x), idle GPU; compiled fp16 PyTorch 4.22 |
 | formats working end to end | 5 (MXINT8, MXFP8, MXFP6, MXFP4, NVFP4) | 5 in compressor, 0 in decoder |
 
 ### Open
@@ -62,9 +62,10 @@ Technical, by priority:
 - [ ] P1 rounding robustness: 6 materials × 2 seeds × MXFP4/NVFP4 × texel/shading training, unseen lighting (`configs/rounding-base.yaml`, running)
 - [x] P0 CUDA decoder v1 for one material: NVFP4 latents, FP16 MMA, matches PyTorch (max err 1.3e-3)
 - [x] P0 FP4 block-scaled MMA verified on RTX PRO 6000: `m16n8k64 kind::mxf4 block_scale`, needs target `sm_120a`
-- [ ] P0 4-neighbour (`concat4`) model: quality vs bilinear at equal memory (`out/concat4-pilot`, running)
-- [ ] P0 decoder v2: layer 1 as two FP4 block-scaled MMAs (one per grid), output-space STF; time vs v1 on an idle GPU
-- [x] P0 Bistro loads with original textures in the renderer: interior + exterior render headless at 1080p (branch `renderer`, 2026-11-21; `docs/renderer-spec.md` §11). Not yet: neural sources, alpha, emissive, video
+- [x] P0 4-neighbour (`concat4`) model: +2.3 % FLIP vs bilinear at equal memory; +12 % with NVFP4 layer-1 weights
+- [x] P0 decoder v2: layer 1 as two FP4 block-scaled MMAs, output-space STF; 1.18–1.21x over fused FP16-unpack (idle GPU)
+- [ ] P1 recover the +12 % FLIP of NVFP4 weights (try MXFP4 latents + FP8 weights, `kind::mxf8f6f4`); overlap latent fetches with MMAs
+- [x] P0 Bistro loads with original textures in the renderer: interior + exterior render headless at 1080p (branch `renderer`, 2026-11-21; `docs/renderer-spec.md` §11). Neural sources via decoder v1 and v2 in progress; not yet: alpha, emissive
 - [ ] P1 decode time vs latent format (FP4 / FP6 / FP8 / FP16 MMA) and Bistro frame time: the paper's headline numbers
 - [ ] P1 all Bistro materials compressed, decoder wired into renderer, per-pixel LOD
 - [ ] P1 BC1 baseline at equal memory
@@ -376,5 +377,48 @@ flowchart LR
 
 - [ ] Push paper commit 61f56d6 to Overleaf after a team read
 - [ ] Webpage, slides, video URLs in milestone
-- [ ] `results/README.md` step 2 says −10 to −33 % FLIP; the CSV (`shade4`) gives −8.8 to −32.5 %. Paper uses the CSV
+- [x] `results/README.md` step 2 corrected to −8.8 to −32.5 % FLIP (matches the CSV)
 - [ ] Verify bib entries: Weinreich 2024, Fujieda & Harada 2024 title, Bistro, PTX ISA
+
+### 2026-11-22 · Decoder v2: FP4-direct timed and profiled
+
+> The FP4-direct kernel runs native block-scaled FP4 MMA and is exact; it is 1.21x faster than an equally fused FP16 kernel because decode becomes fetch-latency-bound.
+
+#### Before
+
+```mermaid
+flowchart LR
+  N4["4 neighbours<br/>raw codes + scales"] --> DEQ["unpack<br/>e2m1x2 → FP16"]
+  DEQ --> DEC["layer 1<br/>9 × FP16 MMA"]
+  DEC --> MLP["layers 2–3<br/>FP16 MMA"]
+```
+
+#### After
+
+```mermaid
+flowchart LR
+  N4["4 neighbours<br/>raw codes + scales"] --> DEC["layer 1<br/>2 × FP4 OMMA.SF"]
+  DEC --> MLP["layers 2–3<br/>FP16 MMA"]
+  N4 -. "fetch latency<br/>now the limit" .-> DEC
+```
+
+#### Decisions
+
+- **Report 1.21x over our own fused FP16 kernel as the FP4 result.** Both kernels are fused and identical except layer 1; SASS shows 16 `OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X` in the FP4 path.
+- **Report the 18.6x over compiled fp16 PyTorch as fusion, not FP4.** The eager-PyTorch 85x compares against an unfused framework and would mislead.
+- **Rejected: a naive unpack as the baseline.** It made FP4 look 8.8x faster; the hardware `cvt.rn.f16x2.e2m1x2` conversion removes almost all of that.
+
+#### Results
+
+| metric | value |
+|---|---|
+| FP4-direct vs FP16-unpack, best setting each, 3 tilings | 1.18–1.21x (0.22–0.24 vs 0.27–0.28 ms) |
+| math-pipe stalls / memory stalls per instruction, FP16 → FP4 | 3.04 → 1.34 / 1.20 → 2.29 |
+| best PyTorch (compiled fp16) | 4.22 ms (FP4-direct 18.6x faster) |
+| kernel vs PyTorch fp32 reference, trained model (max abs err) | 2.8e-3 |
+| achieved occupancy (register-limited) | ≈ 40 % |
+
+#### Open
+
+- [ ] Overlap the next tile's latent fetches with the current MMAs; fewer registers
+- [ ] MXFP4 latents + FP8 weights to recover quality lost to NVFP4 weights

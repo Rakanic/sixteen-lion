@@ -1,0 +1,31 @@
+{
+ "frame": "1920x1080, one lookup per pixel, texture tiled 4x",
+ "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+ "ms": {
+  "pytorch eager fp32 (CUDA cores)": 19.302862548828124,
+  "pytorch eager fp32, TF32 Tensor Cores": 19.062786865234376,
+  "pytorch eager fp16 (Tensor Cores)": 15.763766479492187,
+  "pytorch compiled fp32": 5.83082389831543,
+  "pytorch compiled fp16 (Tensor Cores)": 4.224302291870117,
+  "CUDA FP16-unpack (ours)": 0.2752339172363281,
+  "CUDA FP4-direct (ours)": 0.22729648590087892
+ },
+ "max_abs_err_vs_fp32_ref": {
+  "pytorch eager fp32 (CUDA cores)": 0.0,
+  "pytorch eager fp32, TF32 Tensor Cores": 0.0030173063278198242,
+  "pytorch eager fp16 (Tensor Cores)": 0.0032402873039245605,
+  "pytorch compiled fp32": 0.0,
+  "pytorch compiled fp16 (Tensor Cores)": 0.0032402873039245605,
+  "CUDA FP16-unpack (ours)": 0.003072381019592285,
+  "CUDA FP4-direct (ours)": 0.0027510523796081543
+ },
+ "speedup_of_fp4_direct_over": {
+  "pytorch eager fp32 (CUDA cores)": 84.9237174623362,
+  "pytorch eager fp32, TF32 Tensor Cores": 83.8674948698829,
+  "pytorch eager fp16 (Tensor Cores)": 69.35332245464879,
+  "pytorch compiled fp32": 25.652943446112833,
+  "pytorch compiled fp16 (Tensor Cores)": 18.584987247503165,
+  "CUDA FP16-unpack (ours)": 1.2109026505423146,
+  "CUDA FP4-direct (ours)": 1.0
+ }
+}

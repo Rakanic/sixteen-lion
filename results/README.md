@@ -20,7 +20,7 @@ itself is not where quality comes from. Format choice can be driven by
 ## 2. Does a shading loss help at low bits? → `shading-pilot/`
 
 **Question.** Train on GGX-shaded error (random light/view) as well as texel error, equal memory.
-**Answer.** Yes, on all 9 material × format pairs: FLIP −10 to −33 %, shaded
+**Answer.** Yes, on all 9 material × format pairs: FLIP −8.8 to −32.5 %, shaded
 PSNR +1.3 to +3.1 dB. Bits move from AO/roughness to normals.
 **Meaning.** Use it in every model from now on.
 
@@ -67,9 +67,23 @@ and vs the same number of extra QAT steps).
 
 **Meaning.** A free, post-training improvement that beats texel-aware
 rounding on every material. It is AdaRound with a rendering loss, so it is a
-**supporting technique, not the headline**. Robustness check running
-(`configs/rounding-base.yaml`: 6 materials, 2 seeds, both 4-bit formats,
-unseen lighting); results will land in `rounding/`.
+**supporting technique, not the headline**.
+
+**Robustness** (`rounding/`, `configs/rounding-base.yaml`: 6 materials x 2 seeds x
+MXFP4/NVFP4 x texel/shading training = 48 models, scored under the test lights
+and under unseen lighting: 64-light sky, 4x brighter light, Blinn-Phong BRDF):
+
+| | result |
+|---|---|
+| beats round-to-nearest and texel-aware rounding | **48/48** models, test and unseen lighting |
+| mean FLIP change, rendering-aware rounding | −7.0 to −8.1 % (unseen lighting: −7.1 to −8.2 %) |
+| mean FLIP change, texel-aware rounding | −2.6 to −3.1 % |
+| per material | −2.3 % (rusty_metal_02) to −12.5 % (denim_fabric) |
+| seed agreement | median gap 0.35 points (max 4.8, denim NVFP4: −11.5 vs −16.3 %) |
+| equivalent memory (estimate, milestone curves) | ≈ 24 % (MXFP4) / 20 % (NVFP4) more latents at plain rounding |
+
+It also works on models trained with the plain texel loss (−7.4 to −8.1 %),
+so it is a drop-in step for existing neural textures.
 
 ## 7. CUDA decoder v1 → `decoder/`
 
@@ -83,7 +97,19 @@ it stays 20.6 dB from the bilinear decode, because the MLP is nonlinear.
 **Meaning.** Do not blend latents before the MLP. Feed the 4 neighbouring latent
 texels as stored (4 x 16 values = the K = 64 operand and four scale blocks of one
 FP4 MMA) and filter the decoded colors instead. This is the paper's main
-contribution; model variant `filter: concat4`, kernel v2 in progress.
+contribution; model variant `filter: concat4`.
+
+**v2** (`decoder/v2_profile.md`): the 4-neighbour model with layer 1 as NVFP4
+block-scaled MMA, exact vs PyTorch. Idle GPU, one 1080p frame: **0.22–0.24 ms**
+FP4-direct vs 0.27–0.28 ms FP16-unpack (each at its best launch setting):
+**1.18–1.21x**; the disassembly shows native block-scaled FP4 Tensor Core
+instructions (`OMMA.SF.16864...E2M1...UE4M3.4X`). Against the best PyTorch
+version of the same work (compiled, fp16 Tensor Cores, 4.22 ms) the fused kernel
+is 18.6x faster; that gap is fusion, not FP4.
+The profiler shows why the gain is modest: FP4 removes the arithmetic
+bottleneck (math-pipe stalls 3.0 → 1.3 per instruction) and exposes latent-fetch
+latency (1.2 → 2.3). Quality cost of the FP4-ready model: +2.3 % FLIP (4
+neighbours) and +12 % with NVFP4 layer-1 weights (`concat4-pilot/`).
 
 ## Where this leaves the project
 
