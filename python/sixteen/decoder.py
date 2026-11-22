@@ -183,16 +183,19 @@ class CudaDecoder:
 
 
 @functools.lru_cache(maxsize=None)
-def _ext_v2():
+def _ext_v2(min_blocks=1):
+    """min_blocks: blocks of 256 threads per SM the compiler must fit (caps registers per thread)."""
     from torch.utils.cpp_extension import load
 
-    d = ROOT / "out" / "build" / "ntc_decode_v2"
+    name = "ntc_decode_v2" if min_blocks == 1 else f"ntc_decode_v2_mb{min_blocks}"
+    d = ROOT / "out" / "build" / name
     d.mkdir(parents=True, exist_ok=True)
     return load(
-        name="ntc_decode_v2",
+        name=name,
         sources=[str(ROOT / "cuda" / "ntc_decode_v2.cu")],
         extra_cflags=["-O3", "-std=c++20"],
-        extra_cuda_cflags=["-O3", "-std=c++20", "-gencode=arch=compute_120a,code=sm_120a", "--use_fast_math"],
+        extra_cuda_cflags=["-O3", "-std=c++20", "-gencode=arch=compute_120a,code=sm_120a", "--use_fast_math",
+                           f"-DMIN_BLOCKS={min_blocks}"],
         build_directory=str(d),
         verbose=False,
     )
@@ -293,12 +296,13 @@ class CudaDecoderV2:
         model.load_state_dict(ck["state"])
         return cls(model, (H, W), device)
 
-    def __call__(self, uv, frame=0, fp4=True):
+    def __call__(self, uv, frame=0, fp4=True, min_blocks=1, blocks=None):
         g0, g1 = self.grids
-        return _ext_v2().decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
+        return _ext_v2(min_blocks).decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
                                 g1["codes"], g1["scales"], g1["gscale"], g1["w"], g1["h"],
                                 self.W, self.H, uv.contiguous(), int(frame), self.w1_fp4, self.w1_sf, self.w1_fp16,
-                                self.w1_pe, self.w23, self.bias, self.k[0], self.k[1], bool(fp4), self.blocks)
+                                self.w1_pe, self.w23, self.bias, self.k[0], self.k[1], bool(fp4),
+                                blocks or self.blocks)
 
     def stf_centers(self, uv, frame=0):
         """Texel centers picked by the kernel's output-space STF (bit-exact)."""

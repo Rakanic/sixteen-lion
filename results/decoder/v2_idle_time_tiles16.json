@@ -1,0 +1,15 @@
+{
+ "ckpt": "out/concat4-pilot/castle_brick_07/concat4_w1nvfp4/model.pt",
+ "tiles": 16.0,
+ "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+ "fp16_unpack_ms_0": 0.2561438369750977,
+ "fp4_direct_ms_0": 0.2499350357055664,
+ "fp16_unpack_ms_1": 0.2662883186340332,
+ "fp4_direct_ms_1": 0.25532768249511717,
+ "fp16_unpack_ms_2": 0.2712004852294922,
+ "fp4_direct_ms_2": 0.2650278472900391,
+ "fp16_unpack_ms": 0.2561438369750977,
+ "fp4_direct_ms": 0.2499350357055664,
+ "speedup": 1.024841660361877,
+ "fp4_us_per_mpix": 120.5319423734406
+}

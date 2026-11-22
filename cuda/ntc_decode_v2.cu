@@ -173,8 +173,12 @@ __device__ __forceinline__ void layer(const uint32_t (*a)[4], const uint2* wfrag
   }
 }
 
+#ifndef MIN_BLOCKS
+#define MIN_BLOCKS 1  // blocks per SM the compiler must fit (caps registers; set with -DMIN_BLOCKS=n)
+#endif
+
 template <bool FP4>
-__global__ void __launch_bounds__(256) decode_v2(Grid g0, Grid g1, int W, int H, const float2* __restrict__ uv, int n_pix,
+__global__ void __launch_bounds__(256, MIN_BLOCKS) decode_v2(Grid g0, Grid g1, int W, int H, const float2* __restrict__ uv, int n_pix,
                                                  uint32_t frame, Weights wt, float* __restrict__ out) {
   constexpr int W1_WORDS = FP4 ? (2 * N1 * 32) : (W1_FP16_FRAGS * 32);
   __shared__ uint2 s_w1[W1_WORDS];

@@ -20,7 +20,7 @@ itself is not where quality comes from. Format choice can be driven by
 ## 2. Does a shading loss help at low bits? → `shading-pilot/`
 
 **Question.** Train on GGX-shaded error (random light/view) as well as texel error, equal memory.
-**Answer.** Yes, on all 9 material × format pairs: FLIP −10 to −33 %, shaded
+**Answer.** Yes, on all 9 material × format pairs: FLIP −8.8 to −32.5 %, shaded
 PSNR +1.3 to +3.1 dB. Bits move from AO/roughness to normals.
 **Meaning.** Use it in every model from now on.
 
@@ -97,7 +97,19 @@ it stays 20.6 dB from the bilinear decode, because the MLP is nonlinear.
 **Meaning.** Do not blend latents before the MLP. Feed the 4 neighbouring latent
 texels as stored (4 x 16 values = the K = 64 operand and four scale blocks of one
 FP4 MMA) and filter the decoded colors instead. This is the paper's main
-contribution; model variant `filter: concat4`, kernel v2 in progress.
+contribution; model variant `filter: concat4`.
+
+**v2** (`decoder/v2_profile.md`): the 4-neighbour model with layer 1 as NVFP4
+block-scaled MMA, exact vs PyTorch. Idle GPU, one 1080p frame: **0.22–0.24 ms**
+FP4-direct vs 0.27–0.28 ms FP16-unpack (each at its best launch setting):
+**1.18–1.21x**; the disassembly shows native block-scaled FP4 Tensor Core
+instructions (`OMMA.SF.16864...E2M1...UE4M3.4X`). Against the best PyTorch
+version of the same work (compiled, fp16 Tensor Cores, 4.22 ms) the fused kernel
+is 18.6x faster; that gap is fusion, not FP4.
+The profiler shows why the gain is modest: FP4 removes the arithmetic
+bottleneck (math-pipe stalls 3.0 → 1.3 per instruction) and exposes latent-fetch
+latency (1.2 → 2.3). Quality cost of the FP4-ready model: +2.3 % FLIP (4
+neighbours) and +12 % with NVFP4 layer-1 weights (`concat4-pilot/`).
 
 ## Where this leaves the project
 
