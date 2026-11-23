@@ -7,3 +7,7 @@ data/
 cuda/probe/mma_fp4_probe
 cuda/probe/mma_nvfp4_probe
 cuda/probe/mma_nvfp4_layout
+
+# long demo videos stay local (18+ MB); shared via the artifact
+results/renderer/demo/*.mp4
+results/renderer/demo-tradeoff/*.mp4
