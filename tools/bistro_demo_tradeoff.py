@@ -47,7 +47,9 @@ def main():
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     dev, W, H = "cuda", 1280, 720
-    w1 = json.load(open("results/decoder/w1_modes.json"))["speedup_over_fp16"]
+    bm = json.load(open("results/decoder/w1_modes.json"))["best_ms"]  # prefetch off/on; take the best setting of each mode
+    best = lambda m: min(v for k, v in bm.items() if k.startswith(m + "_pf"))
+    w1 = dict(fp4=best("fp16") / best("fp4"), fp4x2=best("fp16") / best("fp4x2"))
     cost = json.load(open("results/w1-weights/results.json"))["flip_vs_bilinear_pct"]
     sp = dict(one=w1["fp4"], two=w1["fp4x2"])
     cb = dict(one=cost["concat4_w1nvfp4"], two=cost["concat4_w1nvfp4x2"])
@@ -126,7 +128,7 @@ def main():
         for i, (k, title) in enumerate((("one", "One-term FP4 weights"), ("two", "Two-term FP4 weights"))):
             x0 = cw + 20 + i * cw
             dr.text((x0, y0), title, fill=(0, 0, 0), font=f26)
-            dr.text((x0, y0 + 44), f"Decode {sp[k]:.2f}x faster than FP16-unpack", fill=(0, 0, 0), font=f20)
+            dr.text((x0, y0 + 44), f"Decode about {sp[k]:.1f}x faster than FP16-unpack", fill=(0, 0, 0), font=f20)
             dr.text((x0, y0 + 74), "(1080p, idle GPU, castle_brick_07 model)", fill=(110, 110, 110), font=font(16))
             dr.text((x0, y0 + 104), f"FLIP vs bilinear model: +{cb[k]:.1f} %", fill=(0, 0, 0), font=f20)
             dr.text((x0, y0 + 134), "(castle_brick_07, 2 seeds)", fill=(110, 110, 110), font=font(16))

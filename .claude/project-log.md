@@ -503,4 +503,4 @@ flowchart LR
 
 #### Open
 - [ ] Next: speed up two-term FP4 (remaining gap = 16 extra FP4 MMAs + weight smem reads per tile). Try (1) layer 2 as FP8 MMA (40 of ~64 MMA-equivalents per tile are FP16 layers 2-3; needs a QAT check), (2) second weight term on one grid only (needs a quality check)
-- [ ] Bistro refit with `configs/bistro-v2x2.yaml` (a teammate is running it) (needs the Bistro data, not on this machine); the one-term model costs +38 % FLIP there
+- [x] Bistro refit with `configs/bistro-v2x2.yaml` done (Loren, 2026-11-22, CUDA kernel, one view, one seed): scene FLIP on neural pixels +44 % (one-term) and +27 % (two-term) vs the bilinear model; the earlier +38 % came from a FLIP error-map bug (see `docs/renderer-spec.md` section 11). Two-term helps but does not close the gap; part of it is under-training (painted wood at 40000 steps: +44 % to +25 %)
