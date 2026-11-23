@@ -413,3 +413,26 @@ layer-1 weights (`configs/bistro-v2.yaml`, 20000 steps, shading loss; v2 needs t
   4.2 ms FP16 path. The headline numbers are Nicolas's idle-GPU ones in `results/decoder/`.
 * **Videos**: `wipe_original_vs_v2.mp4` (original vs decoder v2) and `v1_vs_v2.mp4` (v1 on bilinear fits vs v2 on concat4 fits; they are
   different fits of the same materials).
+
+### How the renderer and the decoders fit together
+
+The renderer owns everything up to "which texel does this pixel need": a rasterizer writes a G-buffer, and the renderer works out
+each pixel's material, uv and screen-pixel index. A **texture source** then returns the 9 channels (albedo, normal, ARM) for those pixels:
+`source.sample(uv, duv, mat, pixel_id, frame) -> (tex[N, 9], alpha)`. The renderer shades the result with GGX and runs TAA.
+The decoders plug in behind that one method:
+
+| source | decoder | model it needs | tap |
+|---|---|---|---|
+| `original` | none (trilinear on the BC data) | none | trilinear |
+| `original-stf` | none | none | stochastic bilinear, seed = pixel index |
+| `neural-ref` | PyTorch decode at every texel, then the same lookup as `original-stf` | any fit | stochastic, same seeds |
+| `neural-v1` | `sixteen.decoder.CudaDecoder`: FP16 MMA | bilinear fits | one latent-space tap (biased, about 20 dB) |
+| `neural-v2` | `CudaDecoderV2`: layer 1 as FP4 block-scaled MMAs | concat4 fits with `w1_fmt: nvfp4` | output-space STF, seed = pixel index |
+| `neural-v2-fp16` | `CudaDecoderV2(fp4=False)` | same | same |
+
+`MixedSource`/`MixedSourceV2` (in `render/neural_ref.py`) first fill every pixel from the original atlas, then overwrite the fitted materials with
+the decoder's output. A decoder needs: `decoder(uv[N, 2], frame) -> [N, 9]` with uv in texture space (rows top-down; the source flips v),
+one decoder object per material. Decoder v2's tap seeds are the pixel's index in the call, so `MixedSourceV2` decodes a full frame per
+material and reads back that material's pixels: the taps then equal the original-texture path's, which is what makes the
+original-versus-neural comparison exact. Contract changes to the decoder (a binned multi-material kernel, a per-pixel seed argument)
+belong in `MixedSourceV2` only. Everything about training stays in `sixteen.sweep`; the renderer only reads `model.pt` and `metrics.json`.

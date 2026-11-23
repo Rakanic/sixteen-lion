@@ -137,3 +137,39 @@ class MixedSourceV2:
         torch.cuda.synchronize()
         self.ms.append(t0.elapsed_time(t1))
         return tex, alpha
+
+
+NEURAL_KINDS = ("neural-ref", "neural-v1", "neural-v2", "neural-v2-fp16")
+
+
+def neural_source(renderer, scene, fit_dir, kind, device="cuda"):
+    """Texture source that serves every fitted material from our compressor's output and the rest from the originals.
+
+    kind:
+      neural-ref      PyTorch decode of the fits (any model), through the atlas path. The quality reference.
+      neural-v1       CUDA decoder v1 (bilinear fits; FP16 MMA; latent-space tap, biased)
+      neural-v2       CUDA decoder v2 (concat4 + NVFP4-weight fits; FP4 block-scaled MMA; output-space STF)
+      neural-v2-fp16  the same decoder with its FP16-unpack layer 1 (for timing and agreement checks)
+    Unfitted materials use stochastic taps on the original textures (so average several frames).
+    Returns (source, fits).
+    """
+    from .sources import AtlasSource
+    from .textures import TextureAtlas
+
+    assert kind in NEURAL_KINDS, kind
+    fits = load_all_fits(scene, fit_dir, device)
+    assert fits, f"no fits under {fit_dir} (expected <dir>/bistro/<material>/m/shade4/nvfp4/model.pt; see configs/bistro-pilot.yaml, configs/bistro-v2.yaml)"
+    if kind == "neural-ref":
+        over = {f["index"]: TensorSet(f["decoded"], device) for f in fits}
+        return AtlasSource(TextureAtlas(OverrideStore(renderer.store, over)), "stf"), fits
+    base = AtlasSource(TextureAtlas(renderer.store), "stf")
+    if kind == "neural-v1":
+        from ..decoder import CudaDecoder
+
+        return MixedSource(base, {f["index"]: CudaDecoder.from_checkpoint(f["ckpt"]) for f in fits}), fits
+    from ..decoder import CudaDecoderV2
+
+    for f in fits:
+        assert f["model"].filter == "concat4" and f["model"].w1_fmt == "nvfp4", f"{f['stem']}: decoder v2 needs concat4 + w1_fmt nvfp4 fits (configs/bistro-v2.yaml)"
+    decs = {f["index"]: CudaDecoderV2.from_checkpoint(f["ckpt"]) for f in fits}
+    return MixedSourceV2(base, decs, fp4=(kind == "neural-v2")), fits
