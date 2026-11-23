@@ -372,7 +372,7 @@ Both frames use identical camera, jitter and tap seeds, so the difference is com
 | | value |
 |---|---|
 | FLIP, whole frame | 0.0097 |
-| FLIP, neural pixels only | 0.0046 |
+| FLIP, neural pixels only | 0.0106 |
 | PSNR, whole frame / neural pixels | 54.1 / 53.7 dB |
 | neural bytes, 10 materials | 28.3 MiB |
 | BC bytes, same materials (top level / with mips) | 60.0 / 80.0 MiB |
@@ -399,7 +399,7 @@ layer-1 weights (`configs/bistro-v2.yaml`, 20000 steps, shading loss; v2 needs t
 
 | interior entrance, 32 frames, ambient 0.3 | decoder v2 (concat4, NVFP4 weights) | bilinear fits, PyTorch decode |
 |---|---|---|
-| FLIP, neural pixels | 0.0064 | 0.0046 |
+| FLIP, neural pixels | 0.0153 | 0.0106 |
 | FLIP, whole frame | 0.0140 | 0.0097 |
 | PSNR, neural pixels | 51.5 dB | 53.7 dB |
 | neural bytes, 10 materials | 28.4 MiB | 28.3 MiB |
@@ -407,7 +407,7 @@ layer-1 weights (`configs/bistro-v2.yaml`, 20000 steps, shading loss; v2 needs t
 * **The kernel is faithful.** The CUDA v2 render equals the PyTorch decode of the same fits to a max of 2.5e-04 (mean
   2e-05, 90 dB) in display values; the FP4 and FP16 layer-1 paths differ by at most 2e-04.
 * **FP4-direct costs quality here.** concat4 with NVFP4 weights fits worse than the bilinear model in all 10 materials (flat-plane
-  FLIP and texel PSNR), 38 % higher FLIP on the neural pixels, at the same latent bytes. The log's one-material
+  FLIP and texel PSNR), 44 % higher FLIP on the neural pixels, at the same latent bytes. The log's one-material
   pilot saw +12 %. Single seed per material, one view: do not quote the percentage. Neural bytes count the MLP at 16 bits, so v2 is slightly overcounted.
 * **Decode time in the renderer** (10 launches per frame, GPUs shared and busy, not a headline number): 3.4 ms FP4,
   4.2 ms FP16 path. The headline numbers are Nicolas's idle-GPU ones in `results/decoder/`.

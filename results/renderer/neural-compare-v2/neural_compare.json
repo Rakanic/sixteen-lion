@@ -10,7 +10,7 @@
  "materials_fitted": 10,
  "neural_pixel_share": 0.913164664050163,
  "flip_whole_frame": 0.013974334113299847,
- "flip_neural_pixels": 0.006400540471076965,
+ "flip_neural_pixels": 0.015349572524428368,
  "psnr_whole_frame": 51.981048583984375,
  "psnr_neural_pixels": 51.520469665527344,
  "neural_bytes_total": 29766580.0,
@@ -175,8 +175,8 @@
   "fp16_path_vs_fp4_path_max_abs": 0.00015923380851745605
  },
  "decoder_ms_per_frame_median": {
-  "fp4": 4.605087995529175,
-  "fp16": 5.331967830657959,
+  "fp4": 3.3727680444717407,
+  "fp16": 4.590559959411621,
   "materials": 10,
   "note": "all decoder launches of one 1080p frame, GPU shared and busy; each material decodes a full frame"
  }

@@ -23,14 +23,14 @@ It does **not** yet give the paper: a frame time, a BC baseline at equal memory,
 | Bistro loads headless at 1080p | interior 1,046,609 triangles, 71 materials | `docs/bistro-inventory.md` |
 | Bistro's textures ship block-compressed | BC1/BC3 + BC5 + BC3, about 12 bits per full-res texel (16 with BC3 base colour) | `docs/bistro-inventory.md` |
 | Coverage | 10 of 71 interior materials, 91.3 % of the entrance view's pixels | `neural_compare.json` |
-| Quality | FLIP 0.0064 on neural pixels, 0.0140 whole frame; PSNR 51.5 / 52.0 dB; 32 frames, ambient 0.3, same seeds | `neural_compare.json` |
+| Quality | FLIP 0.0153 on neural pixels, 0.0140 whole frame; PSNR 51.5 / 52.0 dB; 32 frames, ambient 0.3, same seeds | `neural_compare.json` |
 | Bytes | 28.4 MiB vs 60.0 MiB BC (top level) for the same ten materials, 80.0 MiB with mips: 2.1x and 2.8x | `neural_compare.json` |
 | Decoder fidelity | CUDA v2 vs PyTorch decode of the same fits: max 2.5e-4 display value, FP4 vs FP16 layer-1 path 1.6e-4 | `neural_compare.json` |
-| Model trade-off | concat4 + NVFP4 weights: FLIP 0.0064 vs 0.0046 (bilinear, PyTorch decode), worse in 10 of 10 materials; single seed per material | `neural-compare/`, `neural-compare-v2/` |
+| Model trade-off | concat4 + NVFP4 weights: FLIP 0.0153 vs 0.0106 (bilinear, PyTorch decode), worse in 10 of 10 materials; single seed per material | `neural-compare/`, `neural-compare-v2/` |
 | v1 bias | latent-space tap stays 20.6 dB from the bilinear decode (already in the brief) | `results/decoder/` |
 
 **Never write**: "better than BC at equal memory" (we compare bytes against decoded BC, not equal-memory quality); a Bistro frame time; "novel" for FP4-direct
-before the literature check; the +38 % as a general figure (one scene view, one seed).
+before the literature check; the +44 % as a general figure (one scene view, one seed).
 
 ## A. Milestone report (`milestone.tex`)
 
@@ -41,7 +41,7 @@ Bistro now loads headless at $1920{\times}1080$ with its original textures
 (1.05\,M triangles, 71 materials), and ten fitted interior materials, covering
 91\,\% of the entrance view's pixels, render through the CUDA FP4-direct
 decoder. After shading, FLIP against the shipped textures is
-$0.0064$ on those pixels at $28.4$\,MiB against $60.0$\,MiB of block-compressed
+$0.0153$ on those pixels at $28.4$\,MiB against $60.0$\,MiB of block-compressed
 textures for the same materials. We also found that Bistro's textures are
 already block-compressed, so our reference is decoded BC data, and that the
 FP4-direct model costs quality against a bilinear one; recovering it is the main
@@ -101,7 +101,7 @@ materials' BC files.
 We fit ten interior materials (91\,\% of the entrance view's pixels) with
 a concat4 model, NVFP4 latents and NVFP4 first-layer weights, as the
 FP4-direct decoder requires, and render them through the CUDA decoder.
-FLIP is $0.0064$ on the neural pixels and $0.0140$ over the frame
+FLIP is $0.0153$ on the neural pixels and $0.0140$ over the frame
 (Fig.~\ref{fig:bistro}); the ten materials take $28.4$\,MiB against $60.0$\,MiB
 of top-level BC data ($80.0$\,MiB with mips). The CUDA render matches the
 PyTorch decode of the same fits to $2.5{\times}10^{-4}$ in display value,
@@ -109,7 +109,7 @@ so the kernel adds no visible error. The largest errors are in the two plaster
 materials (texel PSNR 32.0 and 33.4\,dB), which hold fine grain that one
 2.84\,MiB latent grid cannot carry; smooth materials are close to exact.
 Compared with the bilinear model at the same latent bytes, the FP4-direct model
-is worse in all ten materials (FLIP $0.0064$ against $0.0046$ on the neural
+is worse in all ten materials (FLIP $0.0153$ against $0.0106$ on the neural
 pixels, single seed). We therefore present FP4-direct as a trade of some
 quality for a 1.2$\times$ faster, unpack-free decode and treat closing the gap
 as future work. \todo{all-material Bistro, idle-GPU frame time, BC baseline at equal memory}

@@ -27,10 +27,10 @@ All three should tell the same story as the report's four parts. Say what is our
 | Shading-aware training | FLIP after shading 15 % lower at MXFP4, 23 % lower at fp32 | log table |
 | Rendering-aware rounding | 7 to 8 % lower FLIP than round-to-nearest, **48 of 48** models, worth about 20 to 24 % more latent memory | `results/rounding/summary.md` |
 | Decoder v2 (FP4-direct) | **1.2x** faster than fused FP16-unpack (about 0.22 vs 0.27 ms per 1080p frame), idle GPU | `results/decoder/v2_best_vs_best.json` |
-| Bistro, 10 materials through decoder v2 | FLIP **0.0064** on the neural pixels (91 % of the frame); 28.4 MiB against 60.0 MiB of BC for the same materials (2.1x; 2.8x with mips) | `results/renderer/neural-compare-v2/` |
+| Bistro, 10 materials through decoder v2 | FLIP **0.0153** on the neural pixels (91 % of the frame); 28.4 MiB against 60.0 MiB of BC for the same materials (2.1x; 2.8x with mips) | `results/renderer/neural-compare-v2/` |
 
 **Do not say**: "beats BC at equal memory" (the reference is decoded BC and we compare bytes, not equal-memory quality); that FP4-direct is free
-(concat4 with NVFP4 weights is about 38 % worse in FLIP than the bilinear model on Bistro, single seed; say "costs some quality, recovering it is next");
+(concat4 with NVFP4 weights is about 44 % worse in FLIP than the bilinear model on Bistro, single seed; say "costs some quality, recovering it is next");
 that the FP4-direct idea is novel (the literature check is still open); any frame-time figure from the renderer (GPUs were busy).
 
 ## Video: 60 seconds, four speakers
@@ -64,7 +64,7 @@ Footer: starting points, stated plainly: the NTC idea (Vaidyanathan et al., 2023
 **Slide 2, What works (the evidence).** Left: quality versus bits (`rd_flip.png`) with the three headline numbers (5.7 bits, -23 % FLIP, rounding 48 of 48).
 Right: decoder speedup (`speedup.png`): FP4-direct 1.2x over FP16-unpack, FP16 PyTorch 4.2 ms for scale. One-line caption on what "FP4-direct" means for graphics people: the stored 4-bit codes and scales go to the Tensor Core without being expanded.
 
-**Slide 3, Bistro and the plan.** Left: original | ours crop with the FLIP map and the numbers (0.0064, 2.1x fewer bytes, 91 % of pixels), plus the honest line: "concat4 with FP4 weights costs about a third more FLIP than bilinear; closing this is the main open item".
+**Slide 3, Bistro and the plan.** Left: original | ours crop with the FLIP map and the numbers (0.0153, 2.1x fewer bytes, 91 % of pixels), plus the honest line: "concat4 with FP4 weights costs about a third more FLIP than bilinear; closing this is the main open item".
 Right: updated plan to 12/6 as a five-row table, with the 11/27 gate (if all-material Bistro is not working, switch the headline scene to FlightHelmet, as the proposal allowed):
 
 | dates | goal |

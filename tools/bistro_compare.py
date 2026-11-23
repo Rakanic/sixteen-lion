@@ -136,16 +136,16 @@ def main():
         dec_ms = lambda k: float(np.median(cuda[k][1].ms))
         extra = dict(
             decode="CUDA decoder v2 (FP4-direct layer 1, output-space STF); PyTorch decode of the same fits reported alongside",
-            flip_whole_frame_pytorch=float(flip.evaluate(d_ref.cpu().numpy(), d_pt.cpu().numpy(), "LDR")[1]),
+            flip_whole_frame_pytorch=float(flip.evaluate(d_ref.cpu().numpy(), d_pt.cpu().numpy(), "LDR", applyMagma=False)[1]),
             psnr_whole_frame_pytorch=psnr(d_pt, d_ref),
             cuda_vs_pytorch=dict(max_abs=float((d_neu - d_pt).abs().max()), mean_abs=float((d_neu - d_pt).abs().mean()),
                                  psnr=psnr(d_neu, d_pt), fp16_path_vs_fp4_path_max_abs=float((d_16 - d_neu).abs().max())),
             decoder_ms_per_frame_median=dict(fp4=dec_ms("fp4"), fp16=dec_ms("fp16"), materials=len(fits),
                                              note="all decoder launches of one 1080p frame, GPU shared and busy; each material decodes a full frame"),
         )
-    err, mean_flip, _ = flip.evaluate(d_ref.cpu().numpy(), d_neu.cpu().numpy(), "LDR")
+    err, mean_flip, _ = flip.evaluate(d_ref.cpu().numpy(), d_neu.cpu().numpy(), "LDR", applyMagma=False)
     err = np.asarray(err)
-    err_t = torch.from_numpy(err[..., 0] if err.ndim == 3 else err).to(dev)  # FLIP's map is replicated over RGB
+    err_t = torch.from_numpy(err[..., 0] if err.ndim == 3 else err).to(dev)  # with applyMagma=False FLIP returns the raw error map [H, W, 1] (the default is a magma-coloured RGB image, NOT the error)
     res = dict(
         scene=a.scene, camera=a.camera, size=[W, H], frames=a.frames, ambient=a.ambient, materials_fitted=len(per),
         neural_pixel_share=float(mask.sum()) / float(gb["valid"].sum()),

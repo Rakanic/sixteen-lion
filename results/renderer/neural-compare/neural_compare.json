@@ -10,7 +10,7 @@
  "materials_fitted": 10,
  "neural_pixel_share": 0.913164664050163,
  "flip_whole_frame": 0.009680792689323425,
- "flip_neural_pixels": 0.004626867827028036,
+ "flip_neural_pixels": 0.01064861100167036,
  "psnr_whole_frame": 54.14510726928711,
  "psnr_neural_pixels": 53.685279846191406,
  "neural_bytes_total": 29638580.0,
