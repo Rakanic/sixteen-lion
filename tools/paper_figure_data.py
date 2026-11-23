@@ -25,6 +25,7 @@ SPEED_LABELS = {  # data key -> (row label, group: 0 PyTorch, 1 ours FP16, 2 our
     "pytorch compiled fp16 (Tensor Cores)": ("PyTorch compiled, fp16", 0),
     "CUDA FP16-unpack (ours)": ("Ours: FP16-unpack", 1),
     "CUDA FP4-direct (ours)": ("Ours: FP4-direct", 2),
+    "CUDA FP4-direct two-part weights (ours)": ("Ours: FP4-direct, 2-term $W_1$", 2),
 }
 
 
