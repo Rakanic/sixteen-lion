@@ -20,9 +20,20 @@ cuda-nvcc = "12.9.*"
 cuda-cudart-dev = "12.9.*"
 ninja = ">=1.13.2,<2"
 nsight-compute = "2025.2.*"
+libcusparse-dev = "*"
+libcublas-dev = "*"
+libcusolver-dev = "*"
+libcurand-dev = "*"
+libcufft-dev = "*"
+pyassimp = ">=5.2.5,<6"
+
+[pypi-options]
+no-build-isolation = ["nvdiffrast"]
 
 [pypi-dependencies]
 flip-evaluator = ">=1.6"
+nvdiffrast = { git = "https://github.com/NVlabs/nvdiffrast", tag = "v0.4.0" }
+imageio-ffmpeg = ">=0.8.1, <0.9"
 
 [activation.env]
 PYTHONPATH = "$PIXI_PROJECT_ROOT/python"

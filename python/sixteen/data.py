@@ -26,6 +26,10 @@ def _read(path):
 
 
 def load_material(name, res="2k", root=ROOT):
+    if str(name).startswith("bistro/"):  # Bistro sets live in sixteen.bistro_data
+        from .bistro_data import load_bistro_material
+
+        return load_bistro_material(name.split("/", 1)[1])
     d = pathlib.Path(root) / name
     maps = [_read(d / f"{m}_{res}.png") for m in ("diffuse", "normal", "arm")]
     return torch.from_numpy(np.concatenate(maps, axis=-1)).permute(2, 0, 1).contiguous()

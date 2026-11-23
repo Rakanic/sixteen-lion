@@ -65,7 +65,7 @@ Technical, by priority:
 - [x] P0 4-neighbour (`concat4`) model: +2.3 % FLIP vs bilinear at equal memory; +12 % with NVFP4 layer-1 weights
 - [x] P0 decoder v2: layer 1 as two FP4 block-scaled MMAs, output-space STF; 1.18–1.21x over fused FP16-unpack (idle GPU)
 - [ ] P1 recover the +12 % FLIP of NVFP4 weights (try MXFP4 latents + FP8 weights, `kind::mxf8f6f4`); overlap latent fetches with MMAs
-- [ ] P0 Bistro loads with original textures in the renderer
+- [x] P0 Bistro loads with original textures in the renderer: interior + exterior render headless at 1080p (branch `renderer`, 2026-11-21; `docs/renderer-spec.md` §11). Neural sources via decoder v1 and v2 in progress; not yet: alpha, emissive
 - [ ] P1 decode time vs latent format (FP4 / FP6 / FP8 / FP16 MMA) and Bistro frame time: the paper's headline numbers
 - [ ] P1 all Bistro materials compressed, decoder wired into renderer, per-pixel LOD
 - [ ] P1 BC1 baseline at equal memory

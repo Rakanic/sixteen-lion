@@ -1,0 +1,36 @@
+# Fit the 10 most visible Bistro materials of BistroInterior/entrance (tools/bistro_pick.py).
+# Same materials and losses as bistro-pilot, but concat4 with NVFP4 layer-1 weights: the model decoder v2 (FP4-direct) runs.
+name: bistro-v2
+train:
+  steps: 20000
+  qat_start: 0.7
+  filter: concat4
+  w1_fmt: nvfp4
+grids:
+  m:
+  - - 4
+    - 16
+  - - 8
+    - 16
+losses:
+  shade4:
+    w_texel: 1.0
+    w_shading: 4.0
+sweep:
+  material:
+  - bistro/MASTER_Wood_Painted3
+  - bistro/MASTER_Bistro_Main_Door
+  - bistro/Paris_Table_03
+  - bistro/MASTER_Interior_01_Wood
+  - bistro/MASTER_Interior_01_Plaster
+  - bistro/MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER
+  - bistro/MASTER_Interior_01_Paris_Bartrim
+  - bistro/MASTER_Interior_01_Plaster_Red
+  - bistro/Plates_Ceramic
+  - bistro/MASTER_Interior_01_Brushed_Metal
+  grids:
+  - m
+  loss:
+  - shade4
+  fmt:
+  - nvfp4
