@@ -109,7 +109,7 @@ def main():
 
     rgb_ref = r.accumulate(s_ref, cam, W, H, a.frames, ambient=a.ambient)
     rgb_neu = r.accumulate(s_neu, cam, W, H, a.frames, ambient=a.ambient)
-    v2 = all(f["model"].filter == "concat4" and f["model"].w1_fmt == "nvfp4" for f in fits)
+    v2 = all(f["model"].filter == "concat4" and f["model"].w1_fmt in ("nvfp4", "nvfp4x2") for f in fits)
     cuda = {}
     if v2:
         # CUDA decoder v2 (FP4-direct layer 1) with seeds equal to the screen pixel index, so taps match s_ref/s_neu

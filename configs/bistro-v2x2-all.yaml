@@ -1,0 +1,82 @@
+# ALL eligible BistroInterior materials with the two-term NVFP4 layer-1 weights (decoder v2, FP4x2). The original ten come first;
+# same out dir as bistro-v2x2 (finished runs are skipped).
+name: bistro-v2x2
+train:
+  steps: 20000
+  qat_start: 0.7
+  filter: concat4
+  w1_fmt: nvfp4x2
+grids:
+  m:
+  - - 4
+    - 16
+  - - 8
+    - 16
+losses:
+  shade4:
+    w_texel: 1.0
+    w_shading: 4.0
+sweep:
+  material:
+  - bistro/MASTER_Wood_Painted3
+  - bistro/MASTER_Bistro_Main_Door
+  - bistro/Paris_Table_03
+  - bistro/MASTER_Interior_01_Wood
+  - bistro/MASTER_Interior_01_Plaster
+  - bistro/MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER
+  - bistro/MASTER_Interior_01_Paris_Bartrim
+  - bistro/MASTER_Interior_01_Plaster_Red
+  - bistro/Plates_Ceramic
+  - bistro/MASTER_Interior_01_Brushed_Metal
+  - bistro/Paris_Cashregister
+  - bistro/Paris_Cashregister_Buttons
+  - bistro/Paris_Cashregister_Glass
+  - bistro/Paris_Coasters_01
+  - bistro/ToffeeJar_Metal
+  - bistro/ToffeeJar_Label
+  - bistro/CookieJar_Cookies
+  - bistro/Paris_LiquorBottle_01_Caps
+  - bistro/Metal_Chrome1
+  - bistro/Cloth
+  - bistro/curtainA
+  - bistro/curtainB1
+  - bistro/Cutlery_chrome
+  - bistro/Cutlery_details
+  - bistro/Paris_Doormat
+  - bistro/NapkinHolder_01
+  - bistro/Trolley_Plastic
+  - bistro/Trolley_Wheels
+  - bistro/Trolley_Wood_Painted
+  - bistro/Paris_BarStool
+  - bistro/Paris_Beertap
+  - bistro/MASTER_Interior_01_Wooden_stuco
+  - bistro/MASTER_Interior_01_Grid
+  - bistro/MASTER_Interior_01_Plaster2
+  - bistro/MASTER_Interior_01_Frozen_Glass
+  - bistro/MASTER_Interior_01_Grid1
+  - bistro/MASTER_Interior_01_Material
+  - bistro/Metal_Worn_01
+  - bistro/Wood
+  - bistro/Plastic_02
+  - bistro/Plants_Metal_Base_01
+  - bistro/Paris_Painting_Metal
+  - bistro/Paris_Paintings
+  - bistro/Paris_Paintings_Glass
+  - bistro/Paris_Radiator
+  - bistro/Rubber_Bar_Mat_01
+  - bistro/Plastic_01
+  - bistro/ToffeeJar_Toffee
+  - bistro/Wall_Lamp
+  - bistro/Metal_Bronze_01
+  - bistro/WickerBasket
+  - bistro/MASTER_Glass_Exterior
+  - bistro/MASTER_Concrete_Yellow
+  - bistro/MASTER_Concrete_Grooved
+  - bistro/MASTER_Concrete
+  - bistro/MASTER_Concrete1
+  grids:
+  - m
+  loss:
+  - shade4
+  fmt:
+  - nvfp4

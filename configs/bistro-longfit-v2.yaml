@@ -1,0 +1,26 @@
+# Longer-fit check: concat4 + one-term NVFP4 weights, 40000 steps (twice the usual), MASTER_Wood_Painted3 only.
+name: bistro-longfit-v2
+train:
+  steps: 40000
+  qat_start: 0.7
+  filter: concat4
+  w1_fmt: nvfp4
+grids:
+  m:
+  - - 4
+    - 16
+  - - 8
+    - 16
+losses:
+  shade4:
+    w_texel: 1.0
+    w_shading: 4.0
+sweep:
+  material:
+  - bistro/MASTER_Wood_Painted3
+  grids:
+  - m
+  loss:
+  - shade4
+  fmt:
+  - nvfp4

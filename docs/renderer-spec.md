@@ -436,3 +436,23 @@ one decoder object per material. Decoder v2's tap seeds are the pixel's index in
 material and reads back that material's pixels: the taps then equal the original-texture path's, which is what makes the
 original-versus-neural comparison exact. Contract changes to the decoder (a binned multi-material kernel, a per-pixel seed argument)
 belong in `MixedSourceV2` only. Everything about training stays in `sixteen.sweep`; the renderer only reads `model.pt` and `metrics.json`.
+
+### Three models on the same ten materials (2026-11-22, corrected FLIP; CUDA decoder v2 for the FP4-ready fits)
+
+FLIP is the evaluator's mean over the neural pixels of the entrance view, 32-frame mean, reference = decoded BC textures with the same
+taps and seeds. (An earlier version of this section used the red channel of `flip.evaluate`'s default magma-coloured map as the
+per-pixel error; that was wrong and is replaced by `applyMagma=False`.) Flat-plane FLIP is the project's earlier protocol, mean over the ten fits.
+
+| model (decode) | scene FLIP, neural pixels | vs bilinear | whole frame | flat-plane FLIP | vs bilinear | PSNR, neural px |
+|---|---|---|---|---|---|---|
+| bilinear (PyTorch) | 0.0106 | | 0.0097 | 0.0232 | | 53.7 dB |
+| concat4 + one-term NVFP4 W1 (CUDA v2, fp4) | 0.0153 | +44 % | 0.0140 | 0.0277 | +19 % | 51.5 dB |
+| concat4 + two-term NVFP4 W1 (CUDA v2, fp4x2) | 0.0135 | +27 % | 0.0123 | 0.0261 | +12 % | 52.0 dB |
+
+Nico's castle_brick_07 (2 seeds, `results/w1-weights`): one-term +10.8 %, two-term +1.5 %. On Bistro the two-term model helps (+44 % to +27 % scene, +19 % to +12 % flat
+plane) but does not close the gap, so the weight format explains only part of it. Not yet separated: the 4-texel model itself
+(`configs/bistro-concat4.yaml`, float weights) and training budget (`configs/bistro-longfit-*.yaml`, 40000 steps, MASTER_Wood_Painted3).
+CUDA against the PyTorch decode of the same fits: max 2.5e-04, mean 3e-05 in display value.
+Two of the ten materials (`MASTER_Interior_01_Wood`, `Paris_Table_03`) share byte-identical textures, so there are nine distinct sets; bytes are counted per material.
+The 45 s demo videos use the one-term CUDA decoder; `tools/bistro_demo_tradeoff.py` shows one-term against two-term. Decode time per material and per
+texel-to-pixel ratio: `tools/bench_decode_distance.py` (not yet run on an idle GPU).
