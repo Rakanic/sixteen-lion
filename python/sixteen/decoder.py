@@ -183,11 +183,11 @@ class CudaDecoder:
 
 
 @functools.lru_cache(maxsize=None)
-def _ext_v2(min_blocks=1):
+def _ext_v2(min_blocks=1, prefetch=0):
     """min_blocks: blocks of 256 threads per SM the compiler must fit (caps registers per thread)."""
     from torch.utils.cpp_extension import load
 
-    name = "ntc_decode_v2" if min_blocks == 1 else f"ntc_decode_v2_mb{min_blocks}"
+    name = f"ntc_decode_v2_mb{min_blocks}_pf{prefetch}"
     d = ROOT / "out" / "build" / name
     d.mkdir(parents=True, exist_ok=True)
     return load(
@@ -195,7 +195,7 @@ def _ext_v2(min_blocks=1):
         sources=[str(ROOT / "cuda" / "ntc_decode_v2.cu")],
         extra_cflags=["-O3", "-std=c++20"],
         extra_cuda_cflags=["-O3", "-std=c++20", "-gencode=arch=compute_120a,code=sm_120a", "--use_fast_math",
-                           f"-DMIN_BLOCKS={min_blocks}"],
+                           f"-DMIN_BLOCKS={min_blocks}", f"-DPREFETCH={prefetch}"],
         build_directory=str(d),
         verbose=False,
     )
@@ -239,7 +239,7 @@ class CudaDecoderV2:
     """Decoder for concat4 models with NVFP4 layer-1 weights (train with filter="concat4", w1_fmt="nvfp4"
     or "nvfp4x2", two NVFP4 terms W ~ q(W) + q(W - q(W)), one FP4 MMA each)."""
 
-    MODES = {"fp16": 0, "fp4": 1, "fp4x2": 2, "fp4xfp8": 3}
+    MODES = {"fp16": 0, "fp4": 1, "fp4x2": 2}
 
     def __init__(self, model: NeuralTexture, res, device="cuda"):
         assert model.filter == "concat4" and model.w1_fmt in ("nvfp4", "nvfp4x2"), "needs concat4 + w1_fmt nvfp4[x2]"
@@ -282,7 +282,16 @@ class CudaDecoderV2:
         to_i32 = lambda t: (t & 0xFFFFFFFF).to(torch.int64).where(t < 2**31, t - 2**32).to(torch.int32)
         self.w1_fp4 = to_i32(torch.stack(fp4)).contiguous().view(-1)
         self.w1_sf = to_i32(torch.stack(sf)).contiguous().view(-1)
-        self.w1_fp16 = frag_fp16(wdeq.T.contiguous()).to(device)  # dequantized, gscale folded in
+        # FP16-unpack reads the same FP4 registers as the FP4 path; its K-16 tile (grid k, j) holds,
+        # at fragment row r, latent input k*64 + texel*16 + ch (see compute<MODE_F16> in the kernel)
+        perm = []
+        for k in range(2):
+            for j in range(4):
+                for r in range(16):
+                    t, o, hi = (r % 8) // 2, r % 2, r // 8
+                    texel = (t >> 1) + (2 if j >= 2 else 0)
+                    perm.append(k * 64 + texel * 16 + (t & 1) * 8 + (j & 1) * 4 + hi * 2 + o)
+        self.w1_fp16 = frag_fp16(wdeq.T[perm].contiguous()).to(device)  # dequantized, gscale folded in
         pe = torch.zeros(16, 64)
         pe[:12] = W1[:, 128:140].T.cpu()
         self.w1_pe = frag_fp16(pe).to(device)
@@ -293,8 +302,6 @@ class CudaDecoderV2:
         b3[:9] = lin[2].bias.detach().float().cpu()
         self.bias = torch.cat([lin[0].bias.detach().float().cpu(), lin[1].bias.detach().float().cpu(), b3]).to(device)
         self.k_t = torch.tensor(self.k, dtype=torch.float32, device=device)
-        # FP4 x FP8 timing mode: FP8 weight registers of the right size (values not used for correctness)
-        self.w1_fp8 = torch.randint(-2**31, 2**31 - 1, (2 * 2 * 8 * 32 * 2,), dtype=torch.int32, device=device)
         self.blocks = torch.cuda.get_device_properties(device).multi_processor_count * 4
 
     @classmethod
@@ -307,17 +314,17 @@ class CudaDecoderV2:
         model.load_state_dict(ck["state"])
         return cls(model, (H, W), device)
 
-    def __call__(self, uv, frame=0, fp4=True, min_blocks=1, blocks=None, mode=None):
-        """mode: "fp16", "fp4" (needs a 1-term model), "fp4x2" (2-term), "fp4xfp8" (timing only);
+    def __call__(self, uv, frame=0, fp4=True, min_blocks=1, blocks=None, mode=None, prefetch=0):
+        """mode: "fp16", "fp4" (needs a 1-term model), "fp4x2" (2-term);
         default: the FP4-direct mode matching the model if fp4 else "fp16"."""
         if mode is None:
             mode = ("fp4x2" if self.terms == 2 else "fp4") if fp4 else "fp16"
         assert mode not in ("fp4", "fp4x2") or {"fp4": 1, "fp4x2": 2}[mode] == self.terms, "mode does not match the model"
         g0, g1 = self.grids
-        return _ext_v2(min_blocks).decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
+        return _ext_v2(min_blocks, prefetch).decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
                                 g1["codes"], g1["scales"], g1["gscale"], g1["w"], g1["h"],
                                 self.W, self.H, uv.contiguous(), int(frame), self.w1_fp4, self.w1_sf, self.w1_fp16,
-                                self.w1_fp8, self.w1_pe, self.w23, self.bias, self.k_t, self.MODES[mode],
+                                self.w1_pe, self.w23, self.bias, self.k_t, self.MODES[mode],
                                 blocks or self.blocks)
 
     def stf_centers(self, uv, frame=0):

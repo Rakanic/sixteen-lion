@@ -490,15 +490,17 @@ flowchart LR
 
 #### Decisions
 - **Two FP4 terms for layer-1 weights.** Keeps the exact 4-texel = 4-scale-block mapping; quality within seed noise of the unquantized-weight model.
+- **Store B scales once per quad in shared memory (4 KB → 1 KB per term).** Two-term weights overflowed shared memory at 4 blocks/SM (active warps 55 → 39 %); the fix restores 4 blocks. Prefetching the next tile's latents gave no gain (kept, off by default: `-DPREFETCH=1`).
 - **Rejected: FP4 latents × FP8 weights (m16n8k32 mxf8f6f4).** One scale per 2 texels breaks the mapping for straddling neighbour pairs, and quality is worse (+7.0 %).
 
 #### Results
 | layer-1 weights (castle_brick_07, 2 seeds) | FLIP vs bilinear | 1080p decode vs FP16-unpack |
 |---|---|---|
-| NVFP4 (one term) | +10.8 % | 1.25x |
-| two-term NVFP4 | +1.5 % | 1.07x |
+| NVFP4 (one term) | +10.8 % | 1.22–1.26x |
+| two-term NVFP4 | +1.5 % | 1.10x (1.07x before the B-scale smem fix) |
 | MXFP8 (needs FP4×FP8 MMA) | +7.0 % | 1.18x (timing only) |
 | unquantized (no FP4 MMA) | +2.5 % | — |
 
 #### Open
-- [ ] Bistro refit with `configs/bistro-v2x2.yaml` (needs the Bistro data, not on this machine); the one-term model costs +38 % FLIP there
+- [ ] Next: speed up two-term FP4 (remaining gap = 16 extra FP4 MMAs + weight smem reads per tile). Try (1) layer 2 as FP8 MMA (40 of ~64 MMA-equivalents per tile are FP16 layers 2-3; needs a QAT check), (2) second weight term on one grid only (needs a quality check)
+- [ ] Bistro refit with `configs/bistro-v2x2.yaml` (a teammate is running it) (needs the Bistro data, not on this machine); the one-term model costs +38 % FLIP there

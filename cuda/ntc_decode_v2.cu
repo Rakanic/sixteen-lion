@@ -54,7 +54,6 @@ struct Weights {
   const uint2* w1_pe;       // [8 n][32] FP16 B fragments for PE + fractions
   const uint2* w23;         // layers 2-3, as v1
   const float* bias;        // [64 + 64 + 16]
-  const uint2* w1_fp8;      // [2 grids][2 k32][8 n][32] FP8 B registers (MODE_F4F8, timing only)
   const float* k;           // FP4 paths: per-tensor scale per (grid, term), in MMA order
 };
 
@@ -62,8 +61,6 @@ struct Weights {
 constexpr int MODE_F16 = 0;   // FP16-unpack
 constexpr int MODE_F4 = 1;    // FP4-direct, NVFP4 weights (one term)
 constexpr int MODE_F4X2 = 2;  // FP4-direct, two-term NVFP4 weights (W ~ W1 + W2), two MMAs per grid
-constexpr int MODE_F4F8 = 3;  // FP4 latents x FP8 weights, m16n8k32 kind::mxf8f6f4 (timing only: one
-                              // UE8M0 scale per 2 texels, the straddling neighbour pairs are ignored)
 
 __device__ __forceinline__ uint32_t pcg(uint32_t v) {
   uint32_t s = v * 747796405u + 2891336453u;
@@ -135,19 +132,6 @@ __device__ __forceinline__ void mma_nvfp4(float* d, const uint32_t* a, uint2 b, 
       : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b.x), "r"(b.y), "r"(sa), "r"(sb));
 }
 
-__device__ __forceinline__ void mma_f4f8(float* d, const uint32_t* a, uint2 b, uint32_t sa, uint32_t sb) {
-  asm volatile(
-      "mma.sync.aligned.m16n8k32.row.col.kind::mxf8f6f4.block_scale.scale_vec::1X.f32.e2m1.e4m3.f32.ue8m0 "
-      "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3}, %10, {0, 0}, %11, {0, 0};\n"
-      : "+f"(d[0]), "+f"(d[1]), "+f"(d[2]), "+f"(d[3])
-      : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b.x), "r"(b.y), "r"(sa), "r"(sb));
-}
-
-// 4 packed E2M1 codes (16 bits) -> 4 bytes, each code in bits [5:2] of its byte (f8f6f4 container)
-__device__ __forceinline__ uint32_t widen_e2m1x4(uint32_t x) {
-  return ((x & 0xfu) << 2) | ((x & 0xf0u) << 6) | ((x & 0xf00u) << 10) | ((x & 0xf000u) << 14);
-}
-
 __device__ __forceinline__ __half2 latent_pair(const Grid& g, int texel, int c) {
   uint8_t byte = g.codes[texel * 8 + (c >> 1)];
   __nv_fp8_e4m3 s8;
@@ -197,170 +181,200 @@ __device__ __forceinline__ void layer(const uint32_t (*a)[4], const uint2* wfrag
 #ifndef MIN_BLOCKS
 #define MIN_BLOCKS 1  // blocks per SM the compiler must fit (caps registers; set with -DMIN_BLOCKS=n)
 #endif
+#ifndef PREFETCH
+#define PREFETCH 0    // 1: load the next tile's latents while the current tile's MMAs run
+#endif
+
+// Everything one 16-pixel tile needs from global memory, loaded the same way in
+// every mode: per grid, the FP4 A registers (lane: texel tq/2 and 2 + tq/2,
+// channels (tq&1)*8..+7, rows gq and gq + 8), plus scales and the PE tile.
+struct Fetch {
+  uint32_t a[2][4];
+  uint32_t s[2][2];  // FP4: s[k][0] = UE4M3 scale register; FP16: s[k][h] = scales of texels tq/2, 2+tq/2 (row h)
+  uint32_t ape[4];
+};
+
+template <int MODE>
+__device__ __forceinline__ Fetch fetch(const Grid* grids, int base, int n_pix, int W, int H, uint32_t frame,
+                                       const float2* __restrict__ uv, int lane) {
+  const int gq = lane >> 2, tq = lane & 3;
+  const float two_pi = 6.283185307f;
+  Fetch F;
+  Taps T[2];  // rows gq and gq + 8
+#pragma unroll
+  for (int h = 0; h < 2; ++h) {
+    int p = base + gq + 8 * h;
+    float2 q = p < n_pix ? uv[p] : make_float2(0.f, 0.f);
+    T[h] = make_taps(grids, q.x, q.y, W, H, pcg(uint32_t(p) * 2654435761u ^ frame));
+  }
+#pragma unroll
+  for (int k = 0; k < 2; ++k) {
+    const Grid& g = grids[k];
+    const uint32_t* codes32 = reinterpret_cast<const uint32_t*>(g.codes);
+    F.a[k][0] = codes32[T[0].t[k][tq >> 1] * 2 + (tq & 1)];
+    F.a[k][1] = codes32[T[1].t[k][tq >> 1] * 2 + (tq & 1)];
+    F.a[k][2] = codes32[T[0].t[k][2 + (tq >> 1)] * 2 + (tq & 1)];
+    F.a[k][3] = codes32[T[1].t[k][2 + (tq >> 1)] * 2 + (tq & 1)];
+    if constexpr (MODE == MODE_F16) {
+#pragma unroll
+      for (int h = 0; h < 2; ++h)
+        F.s[k][h] = uint32_t(g.scales[T[h].t[k][tq >> 1]]) | (uint32_t(g.scales[T[h].t[k][2 + (tq >> 1)]]) << 8);
+    } else {
+      uint32_t sa = 0;
+      if (tq < 2) {  // lane 4*gq + 0 holds row gq, lane 4*gq + 1 holds row gq + 8
+#pragma unroll
+        for (int j = 0; j < 4; ++j) sa |= uint32_t(g.scales[T[tq].t[k][j]]) << (8 * j);
+      }
+      F.s[k][0] = sa;
+      F.s[k][1] = 0;
+    }
+  }
+  // PE + fractions tile (K 16): cols 0-7 PE [sin x, sin y, cos x, cos y] x freq 1, 2;
+  // cols 8-11 fractions fx0, fy0, fx1, fy1; cols 12-15 zero
+#pragma unroll
+  for (int h = 0; h < 2; ++h) {
+    float px = T[h].u * grids[0].w * two_pi, py = T[h].v * grids[0].h * two_pi;
+    float f = (tq < 2) ? 1.f : 2.f;
+    float e0, e1;
+    if ((tq & 1) == 0) { e0 = __sinf(px * f); e1 = __sinf(py * f); }
+    else               { e0 = __cosf(px * f); e1 = __cosf(py * f); }
+    F.ape[h] = h2u(__floats2half2_rn(e0, e1));
+    F.ape[h + 2] = tq < 2 ? h2u(__floats2half2_rn(T[h].f[tq][0], T[h].f[tq][1])) : 0u;
+  }
+  return F;
+}
+
+__device__ __forceinline__ __half2 scale_h2(uint32_t byte, float gscale) {
+  __nv_fp8_e4m3 s8;
+  s8.__x = uint8_t(byte);
+  return __float2half2_rn(float(s8) * gscale);
+}
+
+template <int MODE>
+__device__ __forceinline__ void compute(const Fetch& F, const Grid* grids, int base, int n_pix, const Weights& wt,
+                                        const uint2* s_w1, const uint32_t* s_sf, const uint2* s_pe,
+                                        const uint2* s_w23, const float* s_bias, float* __restrict__ out, int lane) {
+  constexpr int TERMS = MODE == MODE_F4X2 ? 2 : 1;
+  const int gq = lane >> 2, tq = lane & 3;
+  float acc1[N1][4];
+  if constexpr (MODE != MODE_F16) {
+    // ---- FP4-direct: per grid, per weight term, one m16n8k64 per 8 neurons.
+    // MMA m = k * TERMS + t has per-tensor scale wt.k[m]; the first starts from zero,
+    // each next one continues from the running sum rescaled by k[m-1] / k[m]
+#pragma unroll
+    for (int k = 0; k < 2; ++k)
+#pragma unroll
+      for (int t = 0; t < TERMS; ++t) {
+        const int m = k * TERMS + t;
+        const float carry = (m == 0) ? 0.f : wt.k[m - 1] / wt.k[m];
+#pragma unroll
+        for (int n = 0; n < N1; ++n) {
+#pragma unroll
+          for (int i = 0; i < 4; ++i) acc1[n][i] = (m == 0) ? 0.f : acc1[n][i] * carry;
+          const int f = m * N1 + n;
+          mma_nvfp4(acc1[n], F.a[k], s_w1[f * 32 + lane], F.s[k][0], s_sf[f * 8 + gq]);
+        }
+      }
+    const float klast = wt.k[2 * TERMS - 1];
+#pragma unroll
+    for (int n = 0; n < N1; ++n) {
+      float b0 = s_bias[n * 8 + tq * 2], b1 = s_bias[n * 8 + tq * 2 + 1];
+      acc1[n][0] = acc1[n][0] * klast + b0; acc1[n][1] = acc1[n][1] * klast + b1;
+      acc1[n][2] = acc1[n][2] * klast + b0; acc1[n][3] = acc1[n][3] * klast + b1;
+      mma16816(acc1[n], F.ape, s_pe[n * 32 + lane]);
+    }
+  } else {
+    // ---- FP16-unpack of the same registers: 4 K-16 tiles per grid. Tile j takes
+    // byte (j&1)*2 (k tq*2, +1) and (j&1)*2 + 1 (k tq*2 + 8, +9) of register a0/a1
+    // (j < 2) or a2/a3 (j >= 2); the weight fragments are permuted to match (decoder.py).
+#pragma unroll
+    for (int n = 0; n < N1; ++n) {
+      float b0 = s_bias[n * 8 + tq * 2], b1 = s_bias[n * 8 + tq * 2 + 1];
+      acc1[n][0] = b0; acc1[n][1] = b1; acc1[n][2] = b0; acc1[n][3] = b1;
+    }
+#pragma unroll
+    for (int k = 0; k < 2; ++k) {
+      __half2 sc[2][2];  // [row h][texel tq/2 or 2 + tq/2]
+#pragma unroll
+      for (int h = 0; h < 2; ++h) {
+        sc[h][0] = scale_h2(F.s[k][h] & 0xffu, grids[k].gscale);
+        sc[h][1] = scale_h2(F.s[k][h] >> 8, grids[k].gscale);
+      }
+#pragma unroll
+      for (int j = 0; j < 4; ++j) {
+        uint32_t a[4];
+#pragma unroll
+        for (int h = 0; h < 2; ++h) {
+          uint32_t word = F.a[k][h + (j >= 2 ? 2 : 0)];
+          uint32_t lo = cvt_e2m1x2((word >> (16 * (j & 1))) & 0xffu);
+          uint32_t hi = cvt_e2m1x2((word >> (16 * (j & 1) + 8)) & 0xffu);
+          a[h] = h2u(__hmul2(*reinterpret_cast<__half2*>(&lo), sc[h][j >> 1]));
+          a[h + 2] = h2u(__hmul2(*reinterpret_cast<__half2*>(&hi), sc[h][j >> 1]));
+        }
+#pragma unroll
+        for (int n = 0; n < N1; ++n) mma16816(acc1[n], a, s_w1[((k * 4 + j) * N1 + n) * 32 + lane]);
+      }
+    }
+#pragma unroll
+    for (int n = 0; n < N1; ++n) mma16816(acc1[n], F.ape, s_pe[n * 32 + lane]);
+  }
+
+  float acc2[N2][4], acc3[N3][4];
+  uint32_t a2[K2][4], a3[K3][4];
+  to_next<N1>(acc1, a2);
+  layer<K2, N2>(a2, s_w23, s_bias + 64, acc2, lane);
+  to_next<N2>(acc2, a3);
+  layer<K3, N3>(a3, s_w23 + K2 * N2 * 32, s_bias + 128, acc3, lane);
+
+#pragma unroll
+  for (int n = 0; n < N3; ++n)
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      int row = gq + (i >> 1) * 8, col = n * 8 + tq * 2 + (i & 1);
+      int p = base + row;
+      if (p < n_pix && col < OUT_CH) out[p * OUT_CH + col] = acc3[n][i];
+    }
+}
 
 template <int MODE>
 __global__ void __launch_bounds__(256, MIN_BLOCKS) decode_v2(Grid g0, Grid g1, int W, int H, const float2* __restrict__ uv, int n_pix,
                                                  uint32_t frame, Weights wt, float* __restrict__ out) {
-  constexpr bool FP4 = MODE == MODE_F4 || MODE == MODE_F4X2;
+  constexpr bool FP4 = MODE != MODE_F16;
   constexpr int TERMS = MODE == MODE_F4X2 ? 2 : 1;
-  constexpr int W1_WORDS = FP4 ? (TERMS * 2 * N1 * 32) : MODE == MODE_F4F8 ? (4 * N1 * 32) : (W1_FP16_FRAGS * 32);
-  constexpr int SF_WORDS = FP4 ? TERMS * 2 * N1 * 32 : MODE == MODE_F4F8 ? 4 * N1 * 32 : 1;
+  constexpr int W1_WORDS = FP4 ? (TERMS * 2 * N1 * 32) : (W1_FP16_FRAGS * 32);
+  // B scales: all 4 lanes of a quad hold the same word, so keep one per quad (8 per MMA), not 32
+  constexpr int SF_WORDS = FP4 ? TERMS * 2 * N1 * 8 : 1;
   __shared__ uint2 s_w1[W1_WORDS];
   __shared__ uint32_t s_sf[SF_WORDS];
   __shared__ uint2 s_pe[PE_FRAGS * 32];
   __shared__ uint2 s_w23[L23_FRAGS * 32];
   __shared__ float s_bias[144];
-  for (int i = threadIdx.x; i < W1_WORDS; i += blockDim.x)
-    s_w1[i] = FP4 ? wt.w1_fp4[i] : MODE == MODE_F4F8 ? wt.w1_fp8[i] : wt.w1_fp16[i];
-  if (MODE != MODE_F16)
-    for (int i = threadIdx.x; i < SF_WORDS; i += blockDim.x) s_sf[i] = MODE == MODE_F4F8 ? 0x7f7f7f7fu : wt.w1_sf[i];
+  for (int i = threadIdx.x; i < W1_WORDS; i += blockDim.x) s_w1[i] = FP4 ? wt.w1_fp4[i] : wt.w1_fp16[i];
+  if (FP4)
+    for (int i = threadIdx.x; i < SF_WORDS; i += blockDim.x) s_sf[i] = wt.w1_sf[(i >> 3) * 32 + (i & 7) * 4];
   for (int i = threadIdx.x; i < PE_FRAGS * 32; i += blockDim.x) s_pe[i] = wt.w1_pe[i];
   for (int i = threadIdx.x; i < L23_FRAGS * 32; i += blockDim.x) s_w23[i] = wt.w23[i];
   for (int i = threadIdx.x; i < 144; i += blockDim.x) s_bias[i] = wt.bias[i];
   __syncthreads();
 
   const Grid grids[2] = {g0, g1};
-  const int lane = threadIdx.x & 31, gq = lane >> 2, tq = lane & 3;
-  const int warps = gridDim.x * (blockDim.x >> 5);
-  const float two_pi = 6.283185307f;
-
-  for (int base = (blockIdx.x * (blockDim.x >> 5) + (threadIdx.x >> 5)) * 16; base < n_pix; base += warps * 16) {
-    Taps T[2];  // rows gq and gq + 8
-#pragma unroll
-    for (int h = 0; h < 2; ++h) {
-      int p = base + gq + 8 * h;
-      float2 q = p < n_pix ? uv[p] : make_float2(0.f, 0.f);
-      T[h] = make_taps(grids, q.x, q.y, W, H, pcg(uint32_t(p) * 2654435761u ^ frame));
-    }
-
-    // ---- PE + fractions tile (K 16): cols 0-7 PE [sin x, sin y, cos x, cos y] x freq 1, 2;
-    //      cols 8-11 fractions fx0, fy0, fx1, fy1; cols 12-15 zero
-    uint32_t ape[4];
-#pragma unroll
-    for (int h = 0; h < 2; ++h) {
-      float px = T[h].u * g0.w * two_pi, py = T[h].v * g0.h * two_pi;
-      float f = (tq < 2) ? 1.f : 2.f;
-      float e0, e1;
-      if ((tq & 1) == 0) { e0 = __sinf(px * f); e1 = __sinf(py * f); }
-      else               { e0 = __cosf(px * f); e1 = __cosf(py * f); }
-      ape[h] = h2u(__floats2half2_rn(e0, e1));
-      ape[h + 2] = tq < 2 ? h2u(__floats2half2_rn(T[h].f[tq][0], T[h].f[tq][1])) : 0u;
-    }
-
-    float acc1[N1][4];
-    if constexpr (FP4) {
-      // ---- FP4-direct: one m16n8k64 per grid per 8 neurons
-#pragma unroll
-      for (int k = 0; k < 2; ++k) {
-        const Grid& g = grids[k];
-        const uint32_t* codes32 = reinterpret_cast<const uint32_t*>(g.codes);
-        uint32_t a[4];
-        a[0] = codes32[T[0].t[k][tq >> 1] * 2 + (tq & 1)];
-        a[1] = codes32[T[1].t[k][tq >> 1] * 2 + (tq & 1)];
-        a[2] = codes32[T[0].t[k][2 + (tq >> 1)] * 2 + (tq & 1)];
-        a[3] = codes32[T[1].t[k][2 + (tq >> 1)] * 2 + (tq & 1)];
-        uint32_t sa = 0;
-        if (tq < 2) {  // lane 4*gq + 0 holds row gq, lane 4*gq + 1 holds row gq + 8
-          const Taps& R = T[tq];
-#pragma unroll
-          for (int j = 0; j < 4; ++j) sa |= uint32_t(g.scales[R.t[k][j]]) << (8 * j);
-        }
-        // MMA m = k * TERMS + t has per-tensor scale wt.k[m]; the first starts from zero,
-        // each next one continues from the running sum rescaled by k[m-1] / k[m]
-#pragma unroll
-        for (int t = 0; t < TERMS; ++t) {
-          const int m = k * TERMS + t;
-          const float carry = (m == 0) ? 0.f : wt.k[m - 1] / wt.k[m];
-#pragma unroll
-          for (int n = 0; n < N1; ++n) {
-#pragma unroll
-            for (int i = 0; i < 4; ++i) acc1[n][i] = (m == 0) ? 0.f : acc1[n][i] * carry;
-            int f = (m * N1 + n) * 32 + lane;
-            mma_nvfp4(acc1[n], a, s_w1[f], sa, s_sf[f]);
-          }
-        }
-      }
-      const float klast = wt.k[2 * TERMS - 1];
-#pragma unroll
-      for (int n = 0; n < N1; ++n) {
-        float b0 = s_bias[n * 8 + tq * 2], b1 = s_bias[n * 8 + tq * 2 + 1];
-        acc1[n][0] = acc1[n][0] * klast + b0; acc1[n][1] = acc1[n][1] * klast + b1;
-        acc1[n][2] = acc1[n][2] * klast + b0; acc1[n][3] = acc1[n][3] * klast + b1;
-        mma16816(acc1[n], ape, s_pe[n * 32 + lane]);
-      }
-    } else if constexpr (MODE == MODE_F4F8) {
-      // ---- FP4 x FP8: per grid two m16n8k32 tiles (texels 0,1 and 2,3) per 8 neurons.
-      // A (8-bit containers): a0 row gq, k tq*4..+3 = texel 2j channels tq*4..+3; a2 = texel 2j+1.
-      // One UE8M0 scale per row per tile: the MXFP4 block (32 values) of the pair's first texel.
-#pragma unroll
-      for (int n = 0; n < N1; ++n) {
-        float b0 = s_bias[n * 8 + tq * 2], b1 = s_bias[n * 8 + tq * 2 + 1];
-        acc1[n][0] = b0; acc1[n][1] = b1; acc1[n][2] = b0; acc1[n][3] = b1;
-      }
-#pragma unroll
-      for (int k = 0; k < 2; ++k) {
-        const Grid& g = grids[k];
-        const uint16_t* codes16 = reinterpret_cast<const uint16_t*>(g.codes);
-#pragma unroll
-        for (int j = 0; j < 2; ++j) {
-          uint32_t a[4];
-          a[0] = widen_e2m1x4(codes16[T[0].t[k][2 * j] * 4 + tq]);
-          a[1] = widen_e2m1x4(codes16[T[1].t[k][2 * j] * 4 + tq]);
-          a[2] = widen_e2m1x4(codes16[T[0].t[k][2 * j + 1] * 4 + tq]);
-          a[3] = widen_e2m1x4(codes16[T[1].t[k][2 * j + 1] * 4 + tq]);
-          uint32_t sa = tq < 2 ? uint32_t(g.scales[T[tq].t[k][2 * j] >> 1]) : 0u;
-#pragma unroll
-          for (int n = 0; n < N1; ++n) {
-            int f = ((k * 2 + j) * N1 + n) * 32 + lane;
-            mma_f4f8(acc1[n], a, s_w1[f], sa, s_sf[f]);
-          }
-        }
-      }
-#pragma unroll
-      for (int n = 0; n < N1; ++n) mma16816(acc1[n], ape, s_pe[n * 32 + lane]);
-    } else {
-      // ---- FP16-unpack: K-tile kt = grid kt/4, texel kt%4 (16 channels = one texel)
-#pragma unroll
-      for (int n = 0; n < N1; ++n) {
-        float b0 = s_bias[n * 8 + tq * 2], b1 = s_bias[n * 8 + tq * 2 + 1];
-        acc1[n][0] = b0; acc1[n][1] = b1; acc1[n][2] = b0; acc1[n][3] = b1;
-      }
-#pragma unroll
-      for (int kt = 0; kt < 8; ++kt) {
-        const Grid& g = grids[kt >> 2];
-        uint32_t a[4];
-#pragma unroll
-        for (int h = 0; h < 2; ++h) {
-          int texel = T[h].t[kt >> 2][kt & 3];
-          __half2 sc = texel_scale(g, texel);  // one scale load per texel
-          uint32_t lo = cvt_e2m1x2(g.codes[texel * 8 + tq]);      // channels tq*2, tq*2+1
-          uint32_t hi = cvt_e2m1x2(g.codes[texel * 8 + 4 + tq]);  // channels tq*2+8, +9
-          a[h] = h2u(__hmul2(*reinterpret_cast<__half2*>(&lo), sc));
-          a[h + 2] = h2u(__hmul2(*reinterpret_cast<__half2*>(&hi), sc));
-        }
-#pragma unroll
-        for (int n = 0; n < N1; ++n) mma16816(acc1[n], a, s_w1[(kt * N1 + n) * 32 + lane]);
-      }
-#pragma unroll
-      for (int n = 0; n < N1; ++n) mma16816(acc1[n], ape, s_pe[n * 32 + lane]);
-    }
-
-    float acc2[N2][4], acc3[N3][4];
-    uint32_t a2[K2][4], a3[K3][4];
-    to_next<N1>(acc1, a2);
-    layer<K2, N2>(a2, s_w23, s_bias + 64, acc2, lane);
-    to_next<N2>(acc2, a3);
-    layer<K3, N3>(a3, s_w23 + K2 * N2 * 32, s_bias + 128, acc3, lane);
-
-#pragma unroll
-    for (int n = 0; n < N3; ++n)
-#pragma unroll
-      for (int i = 0; i < 4; ++i) {
-        int row = gq + (i >> 1) * 8, col = n * 8 + tq * 2 + (i & 1);
-        int p = base + row;
-        if (p < n_pix && col < OUT_CH) out[p * OUT_CH + col] = acc3[n][i];
-      }
+  const int lane = threadIdx.x & 31;
+  const int stride = gridDim.x * (blockDim.x >> 5) * 16;
+  int base = (blockIdx.x * (blockDim.x >> 5) + (threadIdx.x >> 5)) * 16;
+  if (base >= n_pix) return;
+#if PREFETCH
+  Fetch cur = fetch<MODE>(grids, base, n_pix, W, H, frame, uv, lane);
+  for (; base < n_pix; base += stride) {
+    Fetch nxt;
+    if (base + stride < n_pix) nxt = fetch<MODE>(grids, base + stride, n_pix, W, H, frame, uv, lane);  // warp-uniform
+    compute<MODE>(cur, grids, base, n_pix, wt, s_w1, s_sf, s_pe, s_w23, s_bias, out, lane);
+    cur = nxt;
   }
+#else
+  for (; base < n_pix; base += stride)
+    compute<MODE>(fetch<MODE>(grids, base, n_pix, W, H, frame, uv, lane), grids, base, n_pix, wt, s_w1, s_sf, s_pe,
+                  s_w23, s_bias, out, lane);
+#endif
 }
 
 Grid make_grid(const torch::Tensor& codes, const torch::Tensor& scales, double gscale, int64_t w, int64_t h) {
@@ -381,7 +395,7 @@ const T* ptr(const torch::Tensor& t, int64_t bytes, const char* name) {
 torch::Tensor decode(torch::Tensor codes0, torch::Tensor scales0, double gscale0, int64_t w0, int64_t h0,
                      torch::Tensor codes1, torch::Tensor scales1, double gscale1, int64_t w1, int64_t h1,
                      int64_t W, int64_t H, torch::Tensor uv, int64_t frame, torch::Tensor w1_fp4, torch::Tensor w1_sf,
-                     torch::Tensor w1_fp16, torch::Tensor w1_fp8, torch::Tensor w1_pe, torch::Tensor w23,
+                     torch::Tensor w1_fp16, torch::Tensor w1_pe, torch::Tensor w23,
                      torch::Tensor bias, torch::Tensor k, int64_t mode, int64_t blocks) {
   const int terms = int(w1_fp4.numel() * w1_fp4.element_size() / (2 * N1 * 32 * 8));  // weight terms packed
   TORCH_CHECK(terms == 1 || terms == 2, "w1_fp4: 1 or 2 terms");
@@ -392,7 +406,7 @@ torch::Tensor decode(torch::Tensor codes0, torch::Tensor scales0, double gscale0
   Weights wt{ptr<uint2>(w1_fp4, terms * 2 * N1 * 32 * 8, "w1_fp4"), ptr<uint32_t>(w1_sf, terms * 2 * N1 * 32 * 4, "w1_sf"),
              ptr<uint2>(w1_fp16, W1_FP16_FRAGS * 32 * 8, "w1_fp16"), ptr<uint2>(w1_pe, PE_FRAGS * 32 * 8, "w1_pe"),
              ptr<uint2>(w23, L23_FRAGS * 32 * 8, "w23"), ptr<float>(bias, 144 * 4, "bias"),
-             ptr<uint2>(w1_fp8, 4 * N1 * 32 * 8, "w1_fp8"), k.data_ptr<float>()};
+             k.data_ptr<float>()};
   int n = uv.size(0);
   auto out = torch::empty({n, OUT_CH}, uv.options());
   Grid a = make_grid(codes0, scales0, gscale0, w0, h0), b = make_grid(codes1, scales1, gscale1, w1, h1);
@@ -402,13 +416,12 @@ torch::Tensor decode(torch::Tensor codes0, torch::Tensor scales0, double gscale0
     case MODE_F16: decode_v2<MODE_F16><<<int(blocks), 256>>>(a, b, int(W), int(H), q, n, uint32_t(frame), wt, o); break;
     case MODE_F4: decode_v2<MODE_F4><<<int(blocks), 256>>>(a, b, int(W), int(H), q, n, uint32_t(frame), wt, o); break;
     case MODE_F4X2: decode_v2<MODE_F4X2><<<int(blocks), 256>>>(a, b, int(W), int(H), q, n, uint32_t(frame), wt, o); break;
-    case MODE_F4F8: decode_v2<MODE_F4F8><<<int(blocks), 256>>>(a, b, int(W), int(H), q, n, uint32_t(frame), wt, o); break;
-    default: TORCH_CHECK(false, "mode: 0 fp16-unpack, 1 fp4, 2 fp4x2, 3 fp4 x fp8");
+    default: TORCH_CHECK(false, "mode: 0 fp16-unpack, 1 fp4, 2 fp4x2");
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   return out;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("decode", &decode, "concat4 NVFP4 neural texture decode (layer-1 mode: 0 FP16-unpack, 1 FP4, 2 FP4 x2, 3 FP4 x FP8)");
+  m.def("decode", &decode, "concat4 NVFP4 neural texture decode (layer-1 mode: 0 FP16-unpack, 1 FP4, 2 FP4 x2)");
 }
