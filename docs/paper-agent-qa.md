@@ -2,6 +2,11 @@
 
 Latest state. Supersedes the earlier version of this file (commit 2d499e5).
 
+## To fix in `docs/paper-brief.md` (please edit, commit and push)
+
+1. C3 row: replace "FLIP −3 to −10 %" with "mean FLIP −7.0 to −8.1 % (texel-error rounding −2.6 to −3.1 %)".
+2. Writing rules: delete "Do not claim an FP4 speedup until `results/decoder/` has v2 timings ..."; v2 timings exist (FP4-direct 1.18–1.21x over FP16-unpack, `results/decoder/v2_profile.md`).
+
 ## For the milestone tonight
 
 | topic | what to write | source |
