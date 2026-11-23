@@ -1,0 +1,783 @@
+{
+ "fit": "out/bistro-v2x2",
+ "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+ "iters": 100,
+ "reps": 7,
+ "m_values": [
+  0.25,
+  0.5,
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "modes": [
+  "fp16",
+  "fp4x2"
+ ],
+ "gpu_util_before": [
+  "0, 44 %, 16673 MiB",
+  "1, 2 %, 1467 MiB"
+ ],
+ "gpu_util_after": [
+  "0, 65 %, 16673 MiB",
+  "1, 100 %, 1467 MiB"
+ ],
+ "ms": {
+  "MASTER_Bistro_Main_Door|0.25|fp16": 0.3276639938354492,
+  "MASTER_Bistro_Main_Door|0.25|fp4x2": 0.30117120742797854,
+  "MASTER_Bistro_Main_Door|0.5|fp16": 0.3268428802490234,
+  "MASTER_Bistro_Main_Door|0.5|fp4x2": 0.3004764747619629,
+  "MASTER_Bistro_Main_Door|1|fp16": 0.32663711547851565,
+  "MASTER_Bistro_Main_Door|1|fp4x2": 0.3025446319580078,
+  "MASTER_Bistro_Main_Door|2|fp16": 0.32928607940673826,
+  "MASTER_Bistro_Main_Door|2|fp4x2": 0.30543167114257813,
+  "MASTER_Bistro_Main_Door|4|fp16": 0.3332998275756836,
+  "MASTER_Bistro_Main_Door|4|fp4x2": 0.3121651268005371,
+  "MASTER_Bistro_Main_Door|8|fp16": 0.33453662872314455,
+  "MASTER_Bistro_Main_Door|8|fp4x2": 0.31449600219726564,
+  "MASTER_Bistro_Main_Door|16|fp16": 0.3432134246826172,
+  "MASTER_Bistro_Main_Door|16|fp4x2": 0.3232495880126953,
+  "MASTER_Interior_01_Brushed_Metal|0.25|fp16": 0.32225761413574217,
+  "MASTER_Interior_01_Brushed_Metal|0.25|fp4x2": 0.301148796081543,
+  "MASTER_Interior_01_Brushed_Metal|0.5|fp16": 0.3220252990722656,
+  "MASTER_Interior_01_Brushed_Metal|0.5|fp4x2": 0.3005324745178223,
+  "MASTER_Interior_01_Brushed_Metal|1|fp16": 0.32364448547363284,
+  "MASTER_Interior_01_Brushed_Metal|1|fp4x2": 0.3036265563964844,
+  "MASTER_Interior_01_Brushed_Metal|2|fp16": 0.32634849548339845,
+  "MASTER_Interior_01_Brushed_Metal|2|fp4x2": 0.30735967636108397,
+  "MASTER_Interior_01_Brushed_Metal|4|fp16": 0.3313532638549805,
+  "MASTER_Interior_01_Brushed_Metal|4|fp4x2": 0.3126614379882813,
+  "MASTER_Interior_01_Brushed_Metal|8|fp16": 0.3330227279663086,
+  "MASTER_Interior_01_Brushed_Metal|8|fp4x2": 0.3145891189575195,
+  "MASTER_Interior_01_Brushed_Metal|16|fp16": 0.34186912536621095,
+  "MASTER_Interior_01_Brushed_Metal|16|fp4x2": 0.3233638381958008,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.25|fp16": 0.32062110900878904,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.25|fp4x2": 0.29906591415405276,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.5|fp16": 0.3232944107055664,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.5|fp4x2": 0.3020579147338867,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|1|fp16": 0.3241107177734375,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|1|fp4x2": 0.3024083137512207,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|2|fp16": 0.3293008041381836,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|2|fp4x2": 0.30791263580322265,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|4|fp16": 0.335203857421875,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|4|fp4x2": 0.31610687255859377,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|8|fp16": 0.3381459045410156,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|8|fp4x2": 0.31954208374023435,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|16|fp16": 0.3470108795166016,
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|16|fp4x2": 0.3304937744140625,
+  "MASTER_Interior_01_Paris_Bartrim|0.25|fp16": 0.32862464904785155,
+  "MASTER_Interior_01_Paris_Bartrim|0.25|fp4x2": 0.3044905662536621,
+  "MASTER_Interior_01_Paris_Bartrim|0.5|fp16": 0.3261705780029297,
+  "MASTER_Interior_01_Paris_Bartrim|0.5|fp4x2": 0.30209951400756835,
+  "MASTER_Interior_01_Paris_Bartrim|1|fp16": 0.3261676788330078,
+  "MASTER_Interior_01_Paris_Bartrim|1|fp4x2": 0.30447328567504883,
+  "MASTER_Interior_01_Paris_Bartrim|2|fp16": 0.32909374237060546,
+  "MASTER_Interior_01_Paris_Bartrim|2|fp4x2": 0.306363525390625,
+  "MASTER_Interior_01_Paris_Bartrim|4|fp16": 0.33360000610351564,
+  "MASTER_Interior_01_Paris_Bartrim|4|fp4x2": 0.3132793617248535,
+  "MASTER_Interior_01_Paris_Bartrim|8|fp16": 0.3351667022705078,
+  "MASTER_Interior_01_Paris_Bartrim|8|fp4x2": 0.3147811126708984,
+  "MASTER_Interior_01_Paris_Bartrim|16|fp16": 0.34228862762451173,
+  "MASTER_Interior_01_Paris_Bartrim|16|fp4x2": 0.32422431945800784,
+  "MASTER_Interior_01_Plaster|0.25|fp16": 0.3228790283203125,
+  "MASTER_Interior_01_Plaster|0.25|fp4x2": 0.2992083168029785,
+  "MASTER_Interior_01_Plaster|0.5|fp16": 0.32358592987060547,
+  "MASTER_Interior_01_Plaster|0.5|fp4x2": 0.30156192779541013,
+  "MASTER_Interior_01_Plaster|1|fp16": 0.3273907089233398,
+  "MASTER_Interior_01_Plaster|1|fp4x2": 0.3039999961853027,
+  "MASTER_Interior_01_Plaster|2|fp16": 0.32971710205078125,
+  "MASTER_Interior_01_Plaster|2|fp4x2": 0.3069580841064453,
+  "MASTER_Interior_01_Plaster|4|fp16": 0.3340576171875,
+  "MASTER_Interior_01_Plaster|4|fp4x2": 0.31370527267456055,
+  "MASTER_Interior_01_Plaster|8|fp16": 0.3378499221801758,
+  "MASTER_Interior_01_Plaster|8|fp4x2": 0.3188201522827148,
+  "MASTER_Interior_01_Plaster|16|fp16": 0.34907424926757813,
+  "MASTER_Interior_01_Plaster|16|fp4x2": 0.33358272552490237,
+  "MASTER_Interior_01_Plaster_Red|0.25|fp16": 0.3276649475097656,
+  "MASTER_Interior_01_Plaster_Red|0.25|fp4x2": 0.30457536697387694,
+  "MASTER_Interior_01_Plaster_Red|0.5|fp16": 0.32930240631103513,
+  "MASTER_Interior_01_Plaster_Red|0.5|fp4x2": 0.30662591934204103,
+  "MASTER_Interior_01_Plaster_Red|1|fp16": 0.3291785430908203,
+  "MASTER_Interior_01_Plaster_Red|1|fp4x2": 0.30829248428344724,
+  "MASTER_Interior_01_Plaster_Red|2|fp16": 0.3343385696411133,
+  "MASTER_Interior_01_Plaster_Red|2|fp4x2": 0.3131523132324219,
+  "MASTER_Interior_01_Plaster_Red|4|fp16": 0.33928321838378905,
+  "MASTER_Interior_01_Plaster_Red|4|fp4x2": 0.3201465606689453,
+  "MASTER_Interior_01_Plaster_Red|8|fp16": 0.34212799072265626,
+  "MASTER_Interior_01_Plaster_Red|8|fp4x2": 0.3220064163208008,
+  "MASTER_Interior_01_Plaster_Red|16|fp16": 0.3499769592285156,
+  "MASTER_Interior_01_Plaster_Red|16|fp4x2": 0.3356089782714844,
+  "MASTER_Interior_01_Wood|0.25|fp16": 0.33056671142578126,
+  "MASTER_Interior_01_Wood|0.25|fp4x2": 0.30543519973754885,
+  "MASTER_Interior_01_Wood|0.5|fp16": 0.32713310241699217,
+  "MASTER_Interior_01_Wood|0.5|fp4x2": 0.3054963111877441,
+  "MASTER_Interior_01_Wood|1|fp16": 0.32842174530029294,
+  "MASTER_Interior_01_Wood|1|fp4x2": 0.3055379295349121,
+  "MASTER_Interior_01_Wood|2|fp16": 0.3310281753540039,
+  "MASTER_Interior_01_Wood|2|fp4x2": 0.31012319564819335,
+  "MASTER_Interior_01_Wood|4|fp16": 0.33687007904052735,
+  "MASTER_Interior_01_Wood|4|fp4x2": 0.3193779182434082,
+  "MASTER_Interior_01_Wood|8|fp16": 0.34037471771240235,
+  "MASTER_Interior_01_Wood|8|fp4x2": 0.3202774429321289,
+  "MASTER_Interior_01_Wood|16|fp16": 0.3481264114379883,
+  "MASTER_Interior_01_Wood|16|fp4x2": 0.3307379150390625,
+  "MASTER_Wood_Painted3|0.25|fp16": 0.328155517578125,
+  "MASTER_Wood_Painted3|0.25|fp4x2": 0.30402368545532227,
+  "MASTER_Wood_Painted3|0.5|fp16": 0.32784801483154297,
+  "MASTER_Wood_Painted3|0.5|fp4x2": 0.3036163139343262,
+  "MASTER_Wood_Painted3|1|fp16": 0.32905342102050783,
+  "MASTER_Wood_Painted3|1|fp4x2": 0.3067865562438965,
+  "MASTER_Wood_Painted3|2|fp16": 0.3308563232421875,
+  "MASTER_Wood_Painted3|2|fp4x2": 0.307476806640625,
+  "MASTER_Wood_Painted3|4|fp16": 0.3348006439208984,
+  "MASTER_Wood_Painted3|4|fp4x2": 0.31452800750732424,
+  "MASTER_Wood_Painted3|8|fp16": 0.3371363067626953,
+  "MASTER_Wood_Painted3|8|fp4x2": 0.31586336135864257,
+  "MASTER_Wood_Painted3|16|fp16": 0.34501888275146486,
+  "MASTER_Wood_Painted3|16|fp4x2": 0.3249574279785156,
+  "Paris_Table_03|0.25|fp16": 0.3249375915527344,
+  "Paris_Table_03|0.25|fp4x2": 0.30262367248535155,
+  "Paris_Table_03|0.5|fp16": 0.3269657516479492,
+  "Paris_Table_03|0.5|fp4x2": 0.3039414405822754,
+  "Paris_Table_03|1|fp16": 0.3306419372558594,
+  "Paris_Table_03|1|fp4x2": 0.3090569686889648,
+  "Paris_Table_03|2|fp16": 0.3331536102294922,
+  "Paris_Table_03|2|fp4x2": 0.3145075225830078,
+  "Paris_Table_03|4|fp16": 0.33965694427490234,
+  "Paris_Table_03|4|fp4x2": 0.3207628631591797,
+  "Paris_Table_03|8|fp16": 0.34312255859375,
+  "Paris_Table_03|8|fp4x2": 0.32227550506591796,
+  "Paris_Table_03|16|fp16": 0.3498227310180664,
+  "Paris_Table_03|16|fp4x2": 0.3288079833984375,
+  "Plates_Ceramic|0.25|fp16": 0.324983024597168,
+  "Plates_Ceramic|0.25|fp4x2": 0.299052791595459,
+  "Plates_Ceramic|0.5|fp16": 0.32448158264160154,
+  "Plates_Ceramic|0.5|fp4x2": 0.3013564872741699,
+  "Plates_Ceramic|1|fp16": 0.3263734436035156,
+  "Plates_Ceramic|1|fp4x2": 0.3034460830688477,
+  "Plates_Ceramic|2|fp16": 0.32860862731933593,
+  "Plates_Ceramic|2|fp4x2": 0.3052537536621094,
+  "Plates_Ceramic|4|fp16": 0.3350191879272461,
+  "Plates_Ceramic|4|fp4x2": 0.3173695945739746,
+  "Plates_Ceramic|8|fp16": 0.34098655700683594,
+  "Plates_Ceramic|8|fp4x2": 0.3211510467529297,
+  "Plates_Ceramic|16|fp16": 0.35113887786865233,
+  "Plates_Ceramic|16|fp4x2": 0.3301216125488281
+ },
+ "ms_spread": {
+  "MASTER_Bistro_Main_Door|0.25|fp16": [
+   0.2671916770935059,
+   0.33271648406982424
+  ],
+  "MASTER_Bistro_Main_Door|0.25|fp4x2": [
+   0.2573401641845703,
+   0.30782848358154297
+  ],
+  "MASTER_Bistro_Main_Door|0.5|fp16": [
+   0.28615007400512693,
+   0.3355769729614258
+  ],
+  "MASTER_Bistro_Main_Door|0.5|fp4x2": [
+   0.27092863082885743,
+   0.31393888473510745
+  ],
+  "MASTER_Bistro_Main_Door|1|fp16": [
+   0.3008310317993164,
+   0.34222175598144533
+  ],
+  "MASTER_Bistro_Main_Door|1|fp4x2": [
+   0.2795180892944336,
+   0.3177078437805176
+  ],
+  "MASTER_Bistro_Main_Door|2|fp16": [
+   0.3038313674926758,
+   0.34733345031738283
+  ],
+  "MASTER_Bistro_Main_Door|2|fp4x2": [
+   0.2843958473205566,
+   0.3237404632568359
+  ],
+  "MASTER_Bistro_Main_Door|4|fp16": [
+   0.30812095642089843,
+   0.3538336181640625
+  ],
+  "MASTER_Bistro_Main_Door|4|fp4x2": [
+   0.2906003189086914,
+   0.3296255874633789
+  ],
+  "MASTER_Bistro_Main_Door|8|fp16": [
+   0.31226911544799807,
+   0.35689727783203123
+  ],
+  "MASTER_Bistro_Main_Door|8|fp4x2": [
+   0.29341184616088867,
+   0.3323014450073242
+  ],
+  "MASTER_Bistro_Main_Door|16|fp16": [
+   0.3205100631713867,
+   0.36436798095703127
+  ],
+  "MASTER_Bistro_Main_Door|16|fp4x2": [
+   0.3019113540649414,
+   0.3414767837524414
+  ],
+  "MASTER_Interior_01_Brushed_Metal|0.25|fp16": [
+   0.3042931175231934,
+   0.33999969482421877
+  ],
+  "MASTER_Interior_01_Brushed_Metal|0.25|fp4x2": [
+   0.28383520126342776,
+   0.3124012756347656
+  ],
+  "MASTER_Interior_01_Brushed_Metal|0.5|fp16": [
+   0.3019094467163086,
+   0.3354166412353516
+  ],
+  "MASTER_Interior_01_Brushed_Metal|0.5|fp4x2": [
+   0.28404767990112306,
+   0.31289823532104494
+  ],
+  "MASTER_Interior_01_Brushed_Metal|1|fp16": [
+   0.30389951705932616,
+   0.33640575408935547
+  ],
+  "MASTER_Interior_01_Brushed_Metal|1|fp4x2": [
+   0.2869919967651367,
+   0.3141577529907227
+  ],
+  "MASTER_Interior_01_Brushed_Metal|2|fp16": [
+   0.3078112030029297,
+   0.3382672119140625
+  ],
+  "MASTER_Interior_01_Brushed_Metal|2|fp4x2": [
+   0.28941152572631834,
+   0.3178211212158203
+  ],
+  "MASTER_Interior_01_Brushed_Metal|4|fp16": [
+   0.31241823196411134,
+   0.34441055297851564
+  ],
+  "MASTER_Interior_01_Brushed_Metal|4|fp4x2": [
+   0.2953347206115723,
+   0.3253750228881836
+  ],
+  "MASTER_Interior_01_Brushed_Metal|8|fp16": [
+   0.3145913505554199,
+   0.3470713424682617
+  ],
+  "MASTER_Interior_01_Brushed_Metal|8|fp4x2": [
+   0.29632064819335935,
+   0.3265167999267578
+  ],
+  "MASTER_Interior_01_Brushed_Metal|16|fp16": [
+   0.32139488220214846,
+   0.3584636688232422
+  ],
+  "MASTER_Interior_01_Brushed_Metal|16|fp4x2": [
+   0.30616992950439453,
+   0.33787872314453127
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.25|fp16": [
+   0.3030588722229004,
+   0.332454719543457
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.25|fp4x2": [
+   0.28339935302734376,
+   0.3087273597717285
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.5|fp16": [
+   0.30336704254150393,
+   0.33520606994628904
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|0.5|fp4x2": [
+   0.28450016021728514,
+   0.3116035270690918
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|1|fp16": [
+   0.30592544555664064,
+   0.3378192138671875
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|1|fp4x2": [
+   0.28664096832275393,
+   0.31562175750732424
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|2|fp16": [
+   0.3089753532409668,
+   0.34133918762207033
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|2|fp4x2": [
+   0.29035776138305663,
+   0.317772159576416
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|4|fp16": [
+   0.31282815933227537,
+   0.3459280014038086
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|4|fp4x2": [
+   0.29441568374633786,
+   0.32504737854003907
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|8|fp16": [
+   0.3146006393432617,
+   0.34923519134521486
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|8|fp4x2": [
+   0.29599679946899415,
+   0.32682209014892577
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|16|fp16": [
+   0.32149791717529297,
+   0.35675392150878904
+  ],
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER|16|fp4x2": [
+   0.3064364814758301,
+   0.338771858215332
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|0.25|fp16": [
+   0.30594816207885744,
+   0.3363596725463867
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|0.25|fp4x2": [
+   0.28444608688354495,
+   0.31014528274536135
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|0.5|fp16": [
+   0.3044927978515625,
+   0.3339561462402344
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|0.5|fp4x2": [
+   0.28520736694335935,
+   0.3094892883300781
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|1|fp16": [
+   0.3049407958984375,
+   0.3339072036743164
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|1|fp4x2": [
+   0.2866838455200195,
+   0.3115315246582031
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|2|fp16": [
+   0.3082147216796875,
+   0.3373795318603516
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|2|fp4x2": [
+   0.28955904006958005,
+   0.31457279205322264
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|4|fp16": [
+   0.3126963233947754,
+   0.3400864028930664
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|4|fp4x2": [
+   0.2953433609008789,
+   0.32193248748779296
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|8|fp16": [
+   0.3154118347167969,
+   0.3447872161865234
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|8|fp4x2": [
+   0.2969011116027832,
+   0.32576576232910154
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|16|fp16": [
+   0.321399040222168,
+   0.35777217864990235
+  ],
+  "MASTER_Interior_01_Paris_Bartrim|16|fp4x2": [
+   0.3055423927307129,
+   0.34070079803466796
+  ],
+  "MASTER_Interior_01_Plaster|0.25|fp16": [
+   0.30488191604614256,
+   0.3348524856567383
+  ],
+  "MASTER_Interior_01_Plaster|0.25|fp4x2": [
+   0.28389984130859375,
+   0.30985727310180666
+  ],
+  "MASTER_Interior_01_Plaster|0.5|fp16": [
+   0.30556095123291016,
+   0.3371072006225586
+  ],
+  "MASTER_Interior_01_Plaster|0.5|fp4x2": [
+   0.2844112014770508,
+   0.3125001525878906
+  ],
+  "MASTER_Interior_01_Plaster|1|fp16": [
+   0.30749120712280276,
+   0.3412588882446289
+  ],
+  "MASTER_Interior_01_Plaster|1|fp4x2": [
+   0.2855782318115234,
+   0.3171452713012695
+  ],
+  "MASTER_Interior_01_Plaster|2|fp16": [
+   0.3091404724121094,
+   0.3443836975097656
+  ],
+  "MASTER_Interior_01_Plaster|2|fp4x2": [
+   0.2887990379333496,
+   0.3202265548706055
+  ],
+  "MASTER_Interior_01_Plaster|4|fp16": [
+   0.3129052734375,
+   0.34860862731933595
+  ],
+  "MASTER_Interior_01_Plaster|4|fp4x2": [
+   0.2943564796447754,
+   0.32570270538330076
+  ],
+  "MASTER_Interior_01_Plaster|8|fp16": [
+   0.31458560943603514,
+   0.35111297607421876
+  ],
+  "MASTER_Interior_01_Plaster|8|fp4x2": [
+   0.29700063705444335,
+   0.3284060668945312
+  ],
+  "MASTER_Interior_01_Plaster|16|fp16": [
+   0.32195903778076174,
+   0.3589750289916992
+  ],
+  "MASTER_Interior_01_Plaster|16|fp4x2": [
+   0.30502527236938476,
+   0.34184768676757815
+  ],
+  "MASTER_Interior_01_Plaster_Red|0.25|fp16": [
+   0.3061654472351074,
+   0.33679168701171874
+  ],
+  "MASTER_Interior_01_Plaster_Red|0.25|fp4x2": [
+   0.2852924728393555,
+   0.3114316749572754
+  ],
+  "MASTER_Interior_01_Plaster_Red|0.5|fp16": [
+   0.3059017562866211,
+   0.3340118408203125
+  ],
+  "MASTER_Interior_01_Plaster_Red|0.5|fp4x2": [
+   0.28562240600585936,
+   0.3113737678527832
+  ],
+  "MASTER_Interior_01_Plaster_Red|1|fp16": [
+   0.30841567993164065,
+   0.3368556976318359
+  ],
+  "MASTER_Interior_01_Plaster_Red|1|fp4x2": [
+   0.28774112701416016,
+   0.3136790466308594
+  ],
+  "MASTER_Interior_01_Plaster_Red|2|fp16": [
+   0.3083919906616211,
+   0.34237918853759763
+  ],
+  "MASTER_Interior_01_Plaster_Red|2|fp4x2": [
+   0.29109567642211914,
+   0.3204832077026367
+  ],
+  "MASTER_Interior_01_Plaster_Red|4|fp16": [
+   0.3138547134399414,
+   0.3476435089111328
+  ],
+  "MASTER_Interior_01_Plaster_Red|4|fp4x2": [
+   0.29550207138061524,
+   0.3262355041503906
+  ],
+  "MASTER_Interior_01_Plaster_Red|8|fp16": [
+   0.3164326477050781,
+   0.3512377548217773
+  ],
+  "MASTER_Interior_01_Plaster_Red|8|fp4x2": [
+   0.29873247146606446,
+   0.32936031341552735
+  ],
+  "MASTER_Interior_01_Plaster_Red|16|fp16": [
+   0.32262401580810546,
+   0.3585103988647461
+  ],
+  "MASTER_Interior_01_Plaster_Red|16|fp4x2": [
+   0.3062688064575195,
+   0.34096832275390626
+  ],
+  "MASTER_Interior_01_Wood|0.25|fp16": [
+   0.305765438079834,
+   0.3357187271118164
+  ],
+  "MASTER_Interior_01_Wood|0.25|fp4x2": [
+   0.28582015991210935,
+   0.3107276725769043
+  ],
+  "MASTER_Interior_01_Wood|0.5|fp16": [
+   0.30534719467163085,
+   0.3361587142944336
+  ],
+  "MASTER_Interior_01_Wood|0.5|fp4x2": [
+   0.28531072616577147,
+   0.3123820877075195
+  ],
+  "MASTER_Interior_01_Wood|1|fp16": [
+   0.30740896224975583,
+   0.33857887268066406
+  ],
+  "MASTER_Interior_01_Wood|1|fp4x2": [
+   0.2872051239013672,
+   0.3161215972900391
+  ],
+  "MASTER_Interior_01_Wood|2|fp16": [
+   0.309833927154541,
+   0.34108863830566405
+  ],
+  "MASTER_Interior_01_Wood|2|fp4x2": [
+   0.2902873611450195,
+   0.3191900825500488
+  ],
+  "MASTER_Interior_01_Wood|4|fp16": [
+   0.3141142463684082,
+   0.3453113555908203
+  ],
+  "MASTER_Interior_01_Wood|4|fp4x2": [
+   0.29615327835083005,
+   0.3249919891357422
+  ],
+  "MASTER_Interior_01_Wood|8|fp16": [
+   0.3151475143432617,
+   0.3496182250976563
+  ],
+  "MASTER_Interior_01_Wood|8|fp4x2": [
+   0.2984828758239746,
+   0.32709537506103514
+  ],
+  "MASTER_Interior_01_Wood|16|fp16": [
+   0.32173248291015627,
+   0.35922592163085937
+  ],
+  "MASTER_Interior_01_Wood|16|fp4x2": [
+   0.306824951171875,
+   0.339183349609375
+  ],
+  "MASTER_Wood_Painted3|0.25|fp16": [
+   0.30561471939086915,
+   0.3333852767944336
+  ],
+  "MASTER_Wood_Painted3|0.25|fp4x2": [
+   0.2835238456726074,
+   0.30701215744018556
+  ],
+  "MASTER_Wood_Painted3|0.5|fp16": [
+   0.3060643196105957,
+   0.3320809555053711
+  ],
+  "MASTER_Wood_Painted3|0.5|fp4x2": [
+   0.2847532844543457,
+   0.3091836738586426
+  ],
+  "MASTER_Wood_Painted3|1|fp16": [
+   0.3072822380065918,
+   0.33707454681396487
+  ],
+  "MASTER_Wood_Painted3|1|fp4x2": [
+   0.2874095916748047,
+   0.31457279205322264
+  ],
+  "MASTER_Wood_Painted3|2|fp16": [
+   0.3106262397766113,
+   0.3426364898681641
+  ],
+  "MASTER_Wood_Painted3|2|fp4x2": [
+   0.2898566436767578,
+   0.3193539237976074
+  ],
+  "MASTER_Wood_Painted3|4|fp16": [
+   0.31357215881347655,
+   0.3487887954711914
+  ],
+  "MASTER_Wood_Painted3|4|fp4x2": [
+   0.29563711166381834,
+   0.3274313735961914
+  ],
+  "MASTER_Wood_Painted3|8|fp16": [
+   0.31635263442993167,
+   0.3513199996948242
+  ],
+  "MASTER_Wood_Painted3|8|fp4x2": [
+   0.2980569648742676,
+   0.3284739303588867
+  ],
+  "MASTER_Wood_Painted3|16|fp16": [
+   0.32247711181640626,
+   0.3608678436279297
+  ],
+  "MASTER_Wood_Painted3|16|fp4x2": [
+   0.30610368728637694,
+   0.34179359436035156
+  ],
+  "Paris_Table_03|0.25|fp16": [
+   0.30554527282714844,
+   0.3361983871459961
+  ],
+  "Paris_Table_03|0.25|fp4x2": [
+   0.28661983489990234,
+   0.3117647933959961
+  ],
+  "Paris_Table_03|0.5|fp16": [
+   0.3068191909790039,
+   0.3374867248535156
+  ],
+  "Paris_Table_03|0.5|fp4x2": [
+   0.28619232177734377,
+   0.31362720489501955
+  ],
+  "Paris_Table_03|1|fp16": [
+   0.3072796821594238,
+   0.34098430633544924
+  ],
+  "Paris_Table_03|1|fp4x2": [
+   0.28862207412719726,
+   0.31779487609863283
+  ],
+  "Paris_Table_03|2|fp16": [
+   0.30980384826660157,
+   0.3432236862182617
+  ],
+  "Paris_Table_03|2|fp4x2": [
+   0.2913030433654785,
+   0.32129825592041017
+  ],
+  "Paris_Table_03|4|fp16": [
+   0.3131648063659668,
+   0.34802783966064454
+  ],
+  "Paris_Table_03|4|fp4x2": [
+   0.29511648178100586,
+   0.326739501953125
+  ],
+  "Paris_Table_03|8|fp16": [
+   0.3151468849182129,
+   0.350428466796875
+  ],
+  "Paris_Table_03|8|fp4x2": [
+   0.2980963134765625,
+   0.3294438552856445
+  ],
+  "Paris_Table_03|16|fp16": [
+   0.3222252655029297,
+   0.35946720123291015
+  ],
+  "Paris_Table_03|16|fp4x2": [
+   0.3066383934020996,
+   0.342209587097168
+  ],
+  "Plates_Ceramic|0.25|fp16": [
+   0.3058588790893555,
+   0.33452831268310546
+  ],
+  "Plates_Ceramic|0.25|fp4x2": [
+   0.2836911964416504,
+   0.3055891227722168
+  ],
+  "Plates_Ceramic|0.5|fp16": [
+   0.3065167999267578,
+   0.33334529876708985
+  ],
+  "Plates_Ceramic|0.5|fp4x2": [
+   0.28565568923950196,
+   0.312457275390625
+  ],
+  "Plates_Ceramic|1|fp16": [
+   0.3081715202331543,
+   0.3418396759033203
+  ],
+  "Plates_Ceramic|1|fp4x2": [
+   0.28698015213012695,
+   0.3181020736694336
+  ],
+  "Plates_Ceramic|2|fp16": [
+   0.310228157043457,
+   0.34547809600830076
+  ],
+  "Plates_Ceramic|2|fp4x2": [
+   0.28989952087402343,
+   0.32103710174560546
+  ],
+  "Plates_Ceramic|4|fp16": [
+   0.31384063720703126,
+   0.35200992584228513
+  ],
+  "Plates_Ceramic|4|fp4x2": [
+   0.29544992446899415,
+   0.3281606292724609
+  ],
+  "Plates_Ceramic|8|fp16": [
+   0.31569887161254884,
+   0.3545503997802734
+  ],
+  "Plates_Ceramic|8|fp4x2": [
+   0.2971126365661621,
+   0.33030593872070313
+  ],
+  "Plates_Ceramic|16|fp16": [
+   0.32378143310546875,
+   0.3620870590209961
+  ],
+  "Plates_Ceramic|16|fp4x2": [
+   0.30485631942749025,
+   0.34001182556152343
+  ]
+ },
+ "typical_m_entrance": {
+  "MASTER_Interior_01_Plaster": {
+   "median": 12.578067779541016,
+   "p90": 21.15193748474121,
+   "pixel_share": 0.0658068060874939
+  },
+  "MASTER_Interior_01_Wood": {
+   "median": 18.83097267150879,
+   "p90": 66.59557342529297,
+   "pixel_share": 0.09713204205036163
+  },
+  "MASTER_Interior_01_Plaster_Red": {
+   "median": 11.538546562194824,
+   "p90": 45.55133056640625,
+   "pixel_share": 0.031605418771505356
+  },
+  "MASTER_Interior_01_Brushed_Metal": {
+   "median": 14.033989906311035,
+   "p90": 55.23744201660156,
+   "pixel_share": 0.00880835298448801
+  },
+  "MASTER_Interior_01_Floor_Tile_Hexagonal_BLENDSHADER": {
+   "median": 8.550827980041504,
+   "p90": 22.8538761138916,
+   "pixel_share": 0.06035686656832695
+  },
+  "MASTER_Interior_01_Paris_Bartrim": {
+   "median": 11.532231330871582,
+   "p90": 22.24484634399414,
+   "pixel_share": 0.04168836772441864
+  },
+  "Paris_Table_03": {
+   "median": 11.706260681152344,
+   "p90": 28.698667526245117,
+   "pixel_share": 0.13429446518421173
+  },
+  "Plates_Ceramic": {
+   "median": 17.382070541381836,
+   "p90": 43.70228576660156,
+   "pixel_share": 0.010359760373830795
+  },
+  "MASTER_Wood_Painted3": {
+   "median": 2.773545742034912,
+   "p90": 8.508246421813965,
+   "pixel_share": 0.29255062341690063
+  },
+  "MASTER_Bistro_Main_Door": {
+   "median": 1.0394185781478882,
+   "p90": 3.9627485275268555,
+   "pixel_share": 0.15481144189834595
+  }
+ }
+}
