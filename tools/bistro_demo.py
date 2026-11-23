@@ -140,10 +140,10 @@ def main():
         d.rectangle((190, H - 62, 190 + bw, H - 46), fill=(150, 150, 150))
         d.text((16, H - 38), f"Ours: {our_mib:.1f} MiB", fill=(255, 255, 255), font=f22)
         d.rectangle((190, H - 34, 190 + bw * our_mib / bc_mib, H - 18), fill=(70, 130, 210))
-        d.text((560, H - 66), "10 neural materials", fill=(200, 200, 200), font=f22)
-        d.text((560, H - 38), f"{share * 100:.0f} % of pixels in view are neural", fill=(200, 200, 200), font=f22)
-        fl = "FLIP (neural pixels): " + ("..." if flip_n == 0 else f"{flip_now:.4f}  mean so far {run:.4f}")
-        d.text((860, H - 52), fl, fill=(255, 255, 255), font=f22)
+        d.text((560, H - 66), "10 of 71 materials are neural", fill=(200, 200, 200), font=f22)
+        d.text((560, H - 38), f"{share * 100:.0f} % of pixels in view", fill=(200, 200, 200), font=f22)
+        d.text((920, H - 66), "FLIP, neural pixels", fill=(200, 200, 200), font=f22)
+        d.text((920, H - 38), "..." if flip_n == 0 else f"{flip_now:.4f}  (mean {run:.4f})", fill=(255, 255, 255), font=f22)
         wipe_w.append_data(np.asarray(im))
 
         # ---- error-view video (1920x1080): original | ours / FLIP map | numbers
