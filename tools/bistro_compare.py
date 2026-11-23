@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--size", default="1920x1080")
     ap.add_argument("--out", default="results/renderer/neural-compare")
     ap.add_argument("--ambient", type=float, default=0.3, help="constant sky term; same for every render here")
+    ap.add_argument("--crop", type=lambda t: tuple(map(int, t.split("x"))), default=(960, 540), help="crop window WxH in pixels")
+    ap.add_argument("--crop-min-neural", type=float, default=0.8, help="minimum fraction of neural pixels in the crop window")
     a = ap.parse_args()
     W, H = map(int, a.size.split("x"))
     out = pathlib.Path(a.out)
@@ -168,17 +170,41 @@ def main():
     view = lambda t: (t.flip(0).clamp(0, 1) * 255).round().byte().cpu().numpy()
     for name, t in (("reference", d_ref), ("neural", d_neu), ("flip", err_rgb)):
         Image.fromarray(view(t)).resize((1280, 720), Image.LANCZOS).save(out / f"{name}.jpg", quality=90)
-    # crop: the 480x270 window that is mostly neural pixels and has the largest mean FLIP
-    win = (270, 480)
-    score = F.avg_pool2d((err_t * mask)[None, None], win, stride=30)[0, 0]
-    cover = F.avg_pool2d(mask.float()[None, None], win, stride=30)[0, 0]
-    score = torch.where(cover > 0.8, score, torch.zeros_like(score))
+    # crop: the window (default 960x540, a quarter of the frame) that is mostly neural pixels and has the largest
+    # mean FLIP over its neural pixels. Figure: original | ours | FLIP map (magma, 0..0.2) with a colorbar; pixels
+    # of materials we did not fit are gray in the map (both renders use the same original texture there).
+    cw, ch = a.crop
+    win = (ch, cw)
+    nsum = F.avg_pool2d(mask.float()[None, None], win, stride=30)[0, 0]  # fraction of neural pixels per window
+    esum = F.avg_pool2d((err_t * mask)[None, None], win, stride=30)[0, 0]
+    score = torch.where(nsum >= a.crop_min_neural, esum / nsum.clamp(min=1e-9), torch.zeros_like(esum))
     yi, xi = divmod(int(score.argmax()), score.shape[1])
     y0, x0 = yi * 30, xi * 30
-    sl = lambda t: t[y0 : y0 + win[0], x0 : x0 + win[1]]
-    up = lambda x: np.repeat(np.repeat(x, 2, 0), 2, 1)
-    iio.imwrite(out / "crop.jpg", np.concatenate([up(view(sl(d_ref))), up(view(sl(d_neu))), up(view(sl(err_rgb)))], 1), quality=92)
-    json.dump({"crop_origin_gl_row_col": [y0, x0], "crop_size_hw": list(win), "mean_flip_in_crop": float(sl(err_t).mean())}, open(out / "crop.json", "w"))
+    sl = lambda t: t[y0 : y0 + ch, x0 : x0 + cw]
+    m_c = sl(mask)
+    flip_rgb = err_rgb.clone()
+    flip_rgb[~mask] = 0.5  # gray: not neural
+    panels = [view(sl(d_ref)), view(sl(d_neu)), view(sl(flip_rgb))]
+    from PIL import ImageDraw, ImageFont
+
+    # 2x2 grid: original | ours / FLIP map | legend (colorbar, gray = not neural)
+    canvas = Image.new("RGB", (2 * cw + 8, 2 * ch + 8), (255, 255, 255))
+    for i, pnl in enumerate(panels):
+        canvas.paste(Image.fromarray(pnl), ((i % 2) * (cw + 8), (i // 2) * (ch + 8)))
+    d = ImageDraw.Draw(canvas)
+    font = ImageFont.load_default(size=34)
+    lx, ly, bw = cw + 8 + 60, ch + 8 + ch // 2 - 70, cw - 120
+    grad = (cm(np.linspace(0, 1, bw))[:, :3] * 255).astype(np.uint8)
+    canvas.paste(Image.fromarray(np.repeat(grad[None], 40, 0)), (lx, ly))
+    d.text((lx, ly + 50), "0 (identical)", fill=(0, 0, 0), font=font)
+    d.text((lx + bw - 170, ly + 50), "0.2 FLIP", fill=(0, 0, 0), font=font)
+    d.rectangle((lx, ly + 120, lx + 40, ly + 160), fill=(128, 128, 128))
+    d.text((lx + 56, ly + 122), "pixel not neural (not measured)", fill=(0, 0, 0), font=font)
+    canvas.save(out / "crop.jpg", quality=93)
+    json.dump({"crop_origin_gl_row_col": [y0, x0], "crop_size_hw": list(win), "neural_fraction_in_crop": float(m_c.float().mean()),
+               "mean_flip_neural_pixels_in_crop": float(sl(err_t)[m_c].mean()), "mean_flip_all_pixels_in_crop": float(sl(err_t).mean()),
+               "selection": "highest mean FLIP over neural pixels among windows with at least crop_min_neural neural pixels", "crop_min_neural": a.crop_min_neural},
+              open(out / "crop.json", "w"))
     print(json.dumps({k: v for k, v in res.items() if k not in ("per_material", "checks", "note")}, indent=1))
     if v2:
         res["checks"].append("CUDA v2 render vs PyTorch decode of the same fits: see cuda_vs_pytorch")

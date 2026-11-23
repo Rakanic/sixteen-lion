@@ -175,8 +175,8 @@
   "fp16_path_vs_fp4_path_max_abs": 0.00015923380851745605
  },
  "decoder_ms_per_frame_median": {
-  "fp4": 3.3917280435562134,
-  "fp16": 4.223439931869507,
+  "fp4": 4.605087995529175,
+  "fp16": 5.331967830657959,
   "materials": 10,
   "note": "all decoder launches of one 1080p frame, GPU shared and busy; each material decodes a full frame"
  }
