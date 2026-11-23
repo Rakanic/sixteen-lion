@@ -170,6 +170,6 @@ def neural_source(renderer, scene, fit_dir, kind, device="cuda"):
     from ..decoder import CudaDecoderV2
 
     for f in fits:
-        assert f["model"].filter == "concat4" and f["model"].w1_fmt == "nvfp4", f"{f['stem']}: decoder v2 needs concat4 + w1_fmt nvfp4 fits (configs/bistro-v2.yaml)"
+        assert f["model"].filter == "concat4" and f["model"].w1_fmt in ("nvfp4", "nvfp4x2"), f"{f['stem']}: decoder v2 needs concat4 + w1_fmt nvfp4 or nvfp4x2 fits (configs/bistro-v2.yaml, bistro-v2x2.yaml)"
     decs = {f["index"]: CudaDecoderV2.from_checkpoint(f["ckpt"]) for f in fits}
     return MixedSourceV2(base, decs, fp4=(kind == "neural-v2")), fits

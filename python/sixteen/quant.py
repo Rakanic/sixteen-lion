@@ -133,6 +133,8 @@ QUANTIZERS = {
     "int4": lambda x: int_per_channel(x, 4),
     "mxint8": lambda x: mx_quant(x, "int8"),
     "mxfp8": lambda x: mx_quant(x, E4M3),
+    # two-term NVFP4 (weights only): W ~ q(W) + q(W - q(W)), two FP4 MMAs on the same latents
+    "nvfp4x2": lambda x: nvfp4_quant(x) + nvfp4_quant(x - nvfp4_quant(x)),
     "mxfp6": lambda x: mx_quant(x, E2M3),
     "mxfp4": lambda x: mx_quant(x, E2M1),
     "nvfp4": nvfp4_quant,

@@ -1,0 +1,109 @@
+{
+ "seed0": {
+  "bilinear": {
+   "bpp_total": 5.653110504150391,
+   "psnr_texel": 32.561674526910814,
+   "psnr_shaded": 34.19858495194328,
+   "flip": 0.05536549662550291,
+   "psnr_unseen": 34.2545394836357,
+   "flip_unseen": 0.058573788652817406
+  },
+  "concat4": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 32.02876336067683,
+   "psnr_shaded": 33.81850236236757,
+   "flip": 0.05671891197562218,
+   "psnr_unseen": 33.855012206885654,
+   "flip_unseen": 0.061049509793519974
+  },
+  "concat4_w1nvfp4": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.724567445868416,
+   "psnr_shaded": 33.2287394841242,
+   "flip": 0.06203351294000944,
+   "psnr_unseen": 33.327334056171516,
+   "flip_unseen": 0.06523654361565907
+  },
+  "concat4_w1nvfp4x2": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 32.03258480634802,
+   "psnr_shaded": 33.846429147177425,
+   "flip": 0.05591406921545664,
+   "psnr_unseen": 33.867282138785406,
+   "flip_unseen": 0.06001423547665278
+  },
+  "concat4_w1mxfp8": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.91508603692442,
+   "psnr_shaded": 33.58030177265969,
+   "flip": 0.06053706258535385,
+   "psnr_unseen": 33.674124455772926,
+   "flip_unseen": 0.06379637743035953
+  },
+  "concat4_mxfp4lat_w1mxfp8": {
+   "bpp_total": 5.365024566650391,
+   "psnr_texel": 31.75853653058635,
+   "psnr_shaded": 33.34686053618339,
+   "flip": 0.06148333971699079,
+   "psnr_unseen": 33.43574694125038,
+   "flip_unseen": 0.06526359791556995
+  }
+ },
+ "seed1": {
+  "bilinear": {
+   "bpp_total": 5.653110504150391,
+   "psnr_texel": 32.48687425576165,
+   "psnr_shaded": 34.11519761437722,
+   "flip": 0.056323678543170295,
+   "psnr_unseen": 34.290134160017736,
+   "flip_unseen": 0.05930399149656296
+  },
+  "concat4": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.96962213816697,
+   "psnr_shaded": 33.78205129421078,
+   "flip": 0.05771903693675995,
+   "psnr_unseen": 33.79303336629379,
+   "flip_unseen": 0.06135859961311022
+  },
+  "concat4_w1nvfp4": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.61625969918111,
+   "psnr_shaded": 33.2094359572361,
+   "flip": 0.06170252834757169,
+   "psnr_unseen": 33.25813377360283,
+   "flip_unseen": 0.06543180470665295
+  },
+  "concat4_w1nvfp4x2": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.959682329896488,
+   "psnr_shaded": 33.8041478700446,
+   "flip": 0.05748827258745829,
+   "psnr_unseen": 33.813261937822936,
+   "flip_unseen": 0.06118885427713394
+  },
+  "concat4_w1mxfp8": {
+   "bpp_total": 5.677524566650391,
+   "psnr_texel": 31.846677481785694,
+   "psnr_shaded": 33.64361158395045,
+   "flip": 0.059003833681344986,
+   "psnr_unseen": 33.66254590462275,
+   "flip_unseen": 0.06281199057896932
+  }
+ },
+ "mean_flip_2seeds": {
+  "bilinear": 0.0558445875843366,
+  "concat4": 0.05721897445619106,
+  "concat4_w1nvfp4": 0.061868020643790565,
+  "concat4_w1nvfp4x2": 0.056701170901457466,
+  "concat4_w1mxfp8": 0.05977044813334942
+ },
+ "flip_vs_bilinear_pct": {
+  "bilinear": 0.0,
+  "concat4": 2.4610923480791413,
+  "concat4_w1nvfp4": 10.786064182777544,
+  "concat4_w1nvfp4x2": 1.5338698953184071,
+  "concat4_w1mxfp8": 7.029975005337752
+ },
+ "_about": "castle_brick_07, mid grid, texel + 4 x shading loss, NVFP4 latents unless named. w1 = layer-1 latent weights: nvfp4 (one FP4 term), nvfp4x2 (two FP4 terms, W ~ q(W) + q(W - q(W))), mxfp8 (E4M3, block 32). mxfp4lat_w1mxfp8: MXFP4 latents (block 32 = 2 texels) + MXFP8 weights, what the m16n8k32 mxf8f6f4 MMA needs; seed 0 only."
+}

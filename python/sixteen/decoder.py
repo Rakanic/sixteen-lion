@@ -236,10 +236,14 @@ def frag_fp16(Wkn):
 
 
 class CudaDecoderV2:
-    """Decoder for concat4 models with NVFP4 layer-1 weights (train with filter="concat4", w1_fmt="nvfp4")."""
+    """Decoder for concat4 models with NVFP4 layer-1 weights (train with filter="concat4", w1_fmt="nvfp4"
+    or "nvfp4x2", two NVFP4 terms W ~ q(W) + q(W - q(W)), one FP4 MMA each)."""
+
+    MODES = {"fp16": 0, "fp4": 1, "fp4x2": 2, "fp4xfp8": 3}
 
     def __init__(self, model: NeuralTexture, res, device="cuda"):
-        assert model.filter == "concat4" and model.w1_fmt == "nvfp4", "needs a concat4 model with w1_fmt='nvfp4'"
+        assert model.filter == "concat4" and model.w1_fmt in ("nvfp4", "nvfp4x2"), "needs concat4 + w1_fmt nvfp4[x2]"
+        self.terms = 2 if model.w1_fmt == "nvfp4x2" else 1
         lin = [m for m in model.mlp if isinstance(m, torch.nn.Linear)]
         assert [l.in_features for l in lin] == [140, 64, 64] and [l.out_features for l in lin] == [64, 64, 9]
         self.model = model.to(device).eval()
@@ -253,11 +257,16 @@ class CudaDecoderV2:
             self.grids.append(dict(codes=packed, scales=scales, gscale=gs.item(), w=w, h=h, deq=deq.view(h, w, c)))
         # layer 1, latent part: [64 out, 128 in] NVFP4 along the input
         W1 = lin[0].weight.detach().float().to(device)
-        wc, ws, wgs, wdeq = nvfp4_rows(W1[:, :128].contiguous())
+        terms, rest = [], W1[:, :128].contiguous()
+        for _ in range(self.terms):
+            terms.append(nvfp4_rows(rest))
+            rest = rest - terms[-1][3]
+        wdeq = sum(t[3] for t in terms)
         lane = torch.arange(32, device=device)
         gq, tq = lane // 4, lane % 4
-        fp4, sf = [], []
-        for k in range(2):
+        fp4, sf, self.k = [], [], []
+        for k, (t, (wc, ws, wgs, _)) in ((k, tt) for k in range(2) for tt in enumerate(terms)):
+            self.k.append(self.grids[k]["gscale"] * wgs.item())
             for n in range(8):
                 row = n * 8 + gq  # output neuron = MMA column
                 regs = []
@@ -283,7 +292,9 @@ class CudaDecoderV2:
         b3 = torch.zeros(16)
         b3[:9] = lin[2].bias.detach().float().cpu()
         self.bias = torch.cat([lin[0].bias.detach().float().cpu(), lin[1].bias.detach().float().cpu(), b3]).to(device)
-        self.k = [g["gscale"] * wgs.item() for g in self.grids]
+        self.k_t = torch.tensor(self.k, dtype=torch.float32, device=device)
+        # FP4 x FP8 timing mode: FP8 weight registers of the right size (values not used for correctness)
+        self.w1_fp8 = torch.randint(-2**31, 2**31 - 1, (2 * 2 * 8 * 32 * 2,), dtype=torch.int32, device=device)
         self.blocks = torch.cuda.get_device_properties(device).multi_processor_count * 4
 
     @classmethod
@@ -296,12 +307,17 @@ class CudaDecoderV2:
         model.load_state_dict(ck["state"])
         return cls(model, (H, W), device)
 
-    def __call__(self, uv, frame=0, fp4=True, min_blocks=1, blocks=None):
+    def __call__(self, uv, frame=0, fp4=True, min_blocks=1, blocks=None, mode=None):
+        """mode: "fp16", "fp4" (needs a 1-term model), "fp4x2" (2-term), "fp4xfp8" (timing only);
+        default: the FP4-direct mode matching the model if fp4 else "fp16"."""
+        if mode is None:
+            mode = ("fp4x2" if self.terms == 2 else "fp4") if fp4 else "fp16"
+        assert mode not in ("fp4", "fp4x2") or {"fp4": 1, "fp4x2": 2}[mode] == self.terms, "mode does not match the model"
         g0, g1 = self.grids
         return _ext_v2(min_blocks).decode(g0["codes"], g0["scales"], g0["gscale"], g0["w"], g0["h"],
                                 g1["codes"], g1["scales"], g1["gscale"], g1["w"], g1["h"],
                                 self.W, self.H, uv.contiguous(), int(frame), self.w1_fp4, self.w1_sf, self.w1_fp16,
-                                self.w1_pe, self.w23, self.bias, self.k[0], self.k[1], bool(fp4),
+                                self.w1_fp8, self.w1_pe, self.w23, self.bias, self.k_t, self.MODES[mode],
                                 blocks or self.blocks)
 
     def stf_centers(self, uv, frame=0):

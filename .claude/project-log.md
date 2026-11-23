@@ -464,3 +464,41 @@ flowchart LR
 
 - [ ] Push paper commit efa1fc3 to Overleaf
 - [ ] Milestone links (webpage, slides, video) before 23:59 PT tonight
+
+### 2026-11-22 · Two-term FP4 weights recover FP4-direct quality
+
+> NVFP4 layer-1 weights cost +10.8 % FLIP. Storing them as two NVFP4 terms (W ≈ q(W) + q(W − q(W))) brings it to +1.5 % and stays FP4-direct, at a smaller speedup.
+
+#### Before
+```mermaid
+flowchart LR
+  L["FP4 latents<br/>4 texels = K 64"] --> M1["FP4 MMA<br/>per grid"]
+  W["W1 NVFP4"] --> M1
+  M1 --> H["hidden 64"]
+```
+
+#### After
+```mermaid
+flowchart LR
+  L["FP4 latents<br/>4 texels = K 64"] --> M1["FP4 MMA<br/>per grid"]
+  L --> M2["FP4 MMA<br/>residual term"]
+  W["W1 term 1 NVFP4"] --> M1
+  W2["W1 term 2 NVFP4"] --> M2
+  M1 --> H["hidden 64"]
+  M2 --> H
+```
+
+#### Decisions
+- **Two FP4 terms for layer-1 weights.** Keeps the exact 4-texel = 4-scale-block mapping; quality within seed noise of the unquantized-weight model.
+- **Rejected: FP4 latents × FP8 weights (m16n8k32 mxf8f6f4).** One scale per 2 texels breaks the mapping for straddling neighbour pairs, and quality is worse (+7.0 %).
+
+#### Results
+| layer-1 weights (castle_brick_07, 2 seeds) | FLIP vs bilinear | 1080p decode vs FP16-unpack |
+|---|---|---|
+| NVFP4 (one term) | +10.8 % | 1.25x |
+| two-term NVFP4 | +1.5 % | 1.07x |
+| MXFP8 (needs FP4×FP8 MMA) | +7.0 % | 1.18x (timing only) |
+| unquantized (no FP4 MMA) | +2.5 % | — |
+
+#### Open
+- [ ] Bistro refit with `configs/bistro-v2x2.yaml` (needs the Bistro data, not on this machine); the one-term model costs +38 % FLIP there
