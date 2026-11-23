@@ -1,4 +1,60 @@
-# Answers for the paper agent (updated 2026-11-22, with idle-GPU timings)
+# Answers for the paper agent (updated 2026-11-22, after eaec7e1)
+
+## Latest: answers to your 6 questions (supersede anything below)
+
+Include the data we have, even where it is not the best yet, and say we are
+still improving it (two-part weights, layer-2 FP8, Bistro refit).
+
+1. **Canonical decode times: the new kernel, one consistent run.**
+   - File: `results/decoder/v2_baselines.json`; chart: `results/decoder/speedup.{png,pdf}`
+     (`tools/bench_baselines.py --x2 ...`, `tools/plot_decoder_baselines.py`).
+   - Same run: PyTorch eager/TF32/fp16, compiled fp32/fp16, FP16-unpack, FP4-direct, and FP4-direct with two-part weights.
+   - Retire the 0.227 ms / 1.18–1.21x set (`v2_best_vs_best.json`, the timing tables in `v2_profile.md`); keep the
+     Nsight Compute analysis in `v2_profile.md` (bottleneck explanation still holds).
+   - `results/decoder/w1_modes.json` is the interleaved mode sweep (all register caps, prefetch on/off); use it
+     for the claim that launch settings and prefetching do not change the ranking.
+   - Speed chart caption: the PyTorch gap is fusion; the FP4-specific gain is FP4-direct vs FP16-unpack.
+2. **Two-part weights (W ≈ q(W) + q(W − q(W)), two FP4 MMAs per grid): present it as the quality-preserving option, work in progress.**
+   - Quality: `results/w1-weights/results.json` (castle_brick_07, 2 seeds, FLIP vs bilinear; use `flip_vs_bilinear_pct`).
+   - Speed: `v2_baselines.json`.
+   - Paper framing: a trade-off we are still improving.
+     - One-part FP4 weights are fastest but cost quality.
+     - Two-part weights recover the quality (on par with unquantized weights) at a smaller speedup.
+     - Say we are working on closing the speed gap.
+   - Do not call either one final.
+   - MXFP8 weights (needs the FP4 x FP8 MMA): report as rejected.
+     - Worse quality.
+     - Its K = 32 tile shares one scale per 2 texels, which breaks the 4-texel mapping.
+     - Measured 1.18x speedup (commit c7a2461), timing only.
+   - Bistro: not refit by me. A teammate is running `configs/bistro-v2x2.yaml`.
+     - Until that lands, keep 0.0153 vs 0.0106 (`results/renderer/neural-compare*/neural_compare.json`) as the one-part result.
+     - Add that the two-part refit is in progress.
+     - Per-material flat-plane change (one-part vs bilinear) is in the same files (`per_material[].flip_flat_plane`).
+       - Detailed materials (plasters) are close to castle_brick.
+       - Smooth ones (ceramic, painted wood) get the largest relative increase from a small base.
+3. **Rounding on the FP4-ready (concat4 + NVFP4 W1) model: no results yet.** Write it as future work.
+4. **Rendering-aware rounding optimizer (`tools/shading_rounding.py`):**
+   - Parameterization:
+     - Only latents within band 0.05 of a rounding midpoint are free: |t − 0.5| < 0.05, where t is the position between the two neighbouring E2M1 grid points. All other latents round to nearest.
+     - Each free latent has h = rectified sigmoid (sigmoid(a) · 1.2 − 0.1, clamped to [0, 1]); the value is lo + h · (hi − lo).
+     - Init h = 0.7 / 0.3 toward the nearest choice.
+   - Optimizer: Adam, lr 1e-2, 3000 steps, batch 2^20 texels.
+   - Loss:
+     - texel loss + 4 x shading loss + λ · mean(1 − |2h − 1|^β).
+     - β anneals from 20 to 2.
+     - λ = 0 for the first 10 % of steps, then ramps to 0.05 over half the run.
+   - Block scales are fixed by the format rule; the MLP is frozen.
+   - Final choice: h > 0.5.
+   - "more-qat" control: the same number of extra STE-QAT steps at QAT's final lr.
+5. **Still open:** Bistro frame time on an idle GPU, and the BC1/BC5 equal-memory baseline. Mark both `\todo`.
+6. **Corrections:**
+   - Single-term NVFP4 W1 cost on castle_brick_07 is **+10.8 %** FLIP vs bilinear (2 seeds), not +12 % (1 seed).
+   - The 4-neighbour layout alone is **+2.5 %** (2 seeds), not +2.3 %.
+   - Do not compare flat-plane FLIP (≈0.01–0.06 per material) with room FLIP (≈0.01). They are different measurements; compare within one.
+   - Replace 0.227 ms and 1.18–1.21x everywhere with the `v2_baselines.json` numbers.
+
+---
+
 
 Latest state. Supersedes the earlier version of this file (commit 2d499e5).
 

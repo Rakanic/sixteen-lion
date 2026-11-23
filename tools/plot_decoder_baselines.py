@@ -16,7 +16,7 @@ from matplotlib.patches import Patch
 from sixteen.figures import INK, MUTED, style_axes
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-GRAY, BLUE, ORANGE = "#8a8984", "#2a78d6", "#eb6834"
+GRAY, BLUE, ORANGE, AMBER = "#8a8984", "#2a78d6", "#eb6834", "#c98500"
 LABELS = {  # data key -> (axis label, color)
     "pytorch eager fp32 (CUDA cores)": ("PyTorch, fp32", GRAY),
     "pytorch eager fp32, TF32 Tensor Cores": ("PyTorch, fp32 (TF32 Tensor Cores)", GRAY),
@@ -25,7 +25,9 @@ LABELS = {  # data key -> (axis label, color)
     "pytorch compiled fp16 (Tensor Cores)": ("PyTorch compiled, fp16 (Tensor Cores)", GRAY),
     "CUDA FP16-unpack (ours)": ("Ours, fused: FP16-unpack", BLUE),
     "CUDA FP4-direct (ours)": ("Ours, fused: FP4-direct", ORANGE),
+    "CUDA FP4-direct two-part weights (ours)": ("Ours, fused: FP4-direct, two-part weights", AMBER),
 }
+X2 = "CUDA FP4-direct two-part weights (ours)"
 
 
 def main():
@@ -33,7 +35,7 @@ def main():
     ms = r["ms"]
     fp4 = ms["CUDA FP4-direct (ours)"]
     keys = sorted(ms, key=lambda k: ms[k], reverse=True)  # slowest on top
-    fig, ax = plt.subplots(figsize=(6.4, 3.0), facecolor="#fcfcfb")
+    fig, ax = plt.subplots(figsize=(6.4, 3.0 + 0.35 * (X2 in ms)), facecolor="#fcfcfb")
     style_axes(ax)
     ax.grid(axis="y", visible=False)
     y = range(len(keys))
@@ -46,15 +48,18 @@ def main():
     ax.set_yticks(list(y), [LABELS[k][0] for k in keys], fontsize=8, color=INK)
     for i, k in enumerate(keys):
         txt = f"{ms[k]:.3f} ms" if ms[k] < 1 else f"{ms[k]:.1f} ms"
-        if k != "CUDA FP4-direct (ours)":
+        if k == X2:
+            txt += f"   {ms["CUDA FP16-unpack (ours)"] / ms[k]:.2f}x vs FP16-unpack"
+        elif k != "CUDA FP4-direct (ours)":
             s = ms[k] / fp4
             txt += f"   {s:.2f}x" if s < 10 else f"   {s:.1f}x"
         ax.text(ms[k] * 1.12, i, txt, va="center", fontsize=7.5, color=INK)
-    ax.set_xlabel("decode time per 1920x1080 frame (ms, log scale); labels: time and FP4-direct speedup",
+    ax.set_xlabel("decode time per 1920x1080 frame (ms, log scale); labels: time and speedup of FP4-direct (one-part)",
                   fontsize=7.5, color=MUTED)
     ax.legend(handles=[Patch(color=GRAY, label="PyTorch, same work"), Patch(color=BLUE, label="ours, FP16 Tensor Cores"),
-                       Patch(color=ORANGE, label="ours, FP4 Tensor Cores")],
-              loc="lower right", frameon=False, fontsize=7.5)
+                       Patch(color=ORANGE, label="ours, FP4 Tensor Cores")]
+                      + ([Patch(color=AMBER, label="ours, FP4, two-part weights")] if X2 in ms else []),
+              loc="upper center", bbox_to_anchor=(0.4, -0.22), ncol=2, frameon=False, fontsize=7.5)
     fig.tight_layout()
     for ext in ("png", "pdf"):
         fig.savefig(ROOT / f"results/decoder/speedup.{ext}", dpi=220, bbox_inches="tight")

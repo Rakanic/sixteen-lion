@@ -1,5 +1,7 @@
 # Decoder v2 profile (idle RTX PRO 6000 Blackwell, castle_brick_07, concat4 + NVFP4 weights)
 
+> **Timings superseded** (2026-11-22): canonical decode times are in `v2_baselines.json` (current kernel, one run, incl. two-part weights). The Nsight Compute analysis below still holds.
+
 One 1920x1080 frame, one lookup per pixel. Event timing at normal clocks
 (`v2_idle_time_tiles*.json`, best of 3 x 200 launches) and Nsight Compute 2025.2
 (`--set full`, locked base clocks; report `out/profile_decoder/v2.ncu-rep`).
